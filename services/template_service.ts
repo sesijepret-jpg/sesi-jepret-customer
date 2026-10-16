@@ -78,7 +78,7 @@ export class TemplateService {
     // Jika masih gagal dari firestore, coba guessing layout dari id (e.g. template_1 -> layout-template-1.json)
     const match = templateId.match(/\d+/);
     if (match) {
-      return this._loadLocalLayout(`/templates/layout-template-${match[0]}.json`, templateId);
+      return this._loadLocalLayout(`https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/layout-template-${match[0]}.json`, templateId);
     }
 
     return LayoutModel.fallback;

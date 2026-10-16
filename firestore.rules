@@ -54,6 +54,10 @@ service cloud.firestore {
     match /templates/{templateId} {
       allow read: if true;
       allow write: if isAdmin();
+      match /{document=**} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
     // Sessions - readable and writable by all (photo booth creates and updates)

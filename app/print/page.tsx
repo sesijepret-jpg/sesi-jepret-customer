@@ -5,10 +5,9 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import MainLayout from '@/components/layout/MainLayout';
-import SecondaryButton from '@/components/ui/SecondaryButton';
 import PrimaryButton from '@/components/ui/PrimaryButton';
 import PageTitle from '@/components/ui/PageTitle';
-import { ArrowLeft, Printer, CheckCircle } from 'lucide-react';
+import { Printer, CheckCircle } from 'lucide-react';
 import { useSessionStore } from '@/store/session_store';
 import { PhotoComposer } from '@/utils/photo_composer';
 import { SessionRepository } from '@/repositories/session_repository';
@@ -141,13 +140,7 @@ export default function PrintPage() {
           </p>
         </motion.div>
 
-        <div className="flex items-center gap-4">
-          <Link href="/email">
-            <SecondaryButton size="sm">
-              <ArrowLeft size={15} />
-              Kembali
-            </SecondaryButton>
-          </Link>
+        <div className="flex items-center justify-center">
           <Link href="/thank-you">
             <PrimaryButton size="sm" disabled={!isPrinted}>
               Lanjut ke Selesai

@@ -20,13 +20,13 @@ interface PhotoSlot {
   dataUrl: string;
 }
 
-const SLOT_COUNT = 3;
 const sessionRepository = new SessionRepository();
 
 export default function PreviewPage() {
   const router = useRouter();
   const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [slotCount, setSlotCount] = useState<number>(3);
   const [isReady, setIsReady] = useState(false);
 
   const sessionId = useSessionStore((state) => state.sessionId);
@@ -47,17 +47,23 @@ export default function PreviewPage() {
       setPhotoSlots([]);
     }
 
-    if (storeTemplateName) {
-      setSelectedTemplate(storeTemplateName);
-    } else {
-      const savedTemplate = sessionStorage.getItem('boro_selected_template');
-      if (savedTemplate) {
-        try {
-          setSelectedTemplate(JSON.parse(savedTemplate).name ?? null);
-        } catch {
-          setSelectedTemplate(null);
+    const savedTemplate = sessionStorage.getItem('boro_selected_template');
+    if (savedTemplate) {
+      try {
+        const parsed = JSON.parse(savedTemplate);
+        if (parsed.name) {
+          setSelectedTemplate(parsed.name);
+        } else if (storeTemplateName) {
+          setSelectedTemplate(storeTemplateName);
         }
+        if (parsed.photoCount) {
+          setSlotCount(Number(parsed.photoCount));
+        }
+      } catch {
+        setSelectedTemplate(storeTemplateName || null);
       }
+    } else if (storeTemplateName) {
+      setSelectedTemplate(storeTemplateName);
     }
 
     setIsReady(true);
@@ -69,9 +75,11 @@ export default function PreviewPage() {
     }
   }, [isReady, photoSlots.length, router]);
 
+  const expectedCount = Math.max(slotCount, photoSlots.length, 1);
+
   const slotRows = useMemo(
-    () => Array.from({ length: SLOT_COUNT }, (_, index) => photoSlots[index] ?? null),
-    [photoSlots]
+    () => Array.from({ length: expectedCount }, (_, index) => photoSlots[index] ?? null),
+    [photoSlots, expectedCount]
   );
 
   const hasPhotos = photoSlots.length > 0;
@@ -132,7 +140,7 @@ export default function PreviewPage() {
                 </Typography>
               </div>
               <div className="rounded-full border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-black/70">
-                {photoSlots.length} / {SLOT_COUNT}
+                {photoSlots.length} / {expectedCount}
               </div>
             </div>
 

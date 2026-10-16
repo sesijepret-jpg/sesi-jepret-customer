@@ -79,6 +79,38 @@ export default function TemplatesPage() {
     }));
   }, [templates]);
 
+  const TUTORIAL_UPI_NUMBERS = [11, 13, 14, 15, 16];
+
+  const getTemplateNum = (tpl: TemplateCard) => {
+    const match = tpl.id.match(/\d+/) || tpl.name.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+  };
+
+  const { upiCards, otherCards } = useMemo(() => {
+    const upiList: TemplateCard[] = [];
+    const othersList: TemplateCard[] = [];
+
+    cards.forEach((card) => {
+      const num = getTemplateNum(card);
+      if (TUTORIAL_UPI_NUMBERS.includes(num)) {
+        upiList.push({
+          ...card,
+          tag: 'Tutorial UPI',
+        });
+      } else {
+        othersList.push(card);
+      }
+    });
+
+    upiList.sort((a, b) => {
+      const orderA = TUTORIAL_UPI_NUMBERS.indexOf(getTemplateNum(a));
+      const orderB = TUTORIAL_UPI_NUMBERS.indexOf(getTemplateNum(b));
+      return orderA - orderB;
+    });
+
+    return { upiCards: upiList, otherCards: othersList };
+  }, [cards]);
+
   const selectedTemplate = useMemo(
     () => cards.find((template) => template.id === selectedTemplateId) ?? null,
     [cards, selectedTemplateId]
@@ -120,9 +152,61 @@ export default function TemplatesPage() {
     </div>
   );
 
+  const renderTemplateGrid = (items: TemplateCard[]) => (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((tpl) => {
+        const selected = tpl.id === selectedTemplateId;
+        return (
+          <motion.button
+            key={tpl.id}
+            type="button"
+            onClick={() => handleSelect(tpl)}
+            whileHover={{ y: -4 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className={
+              `relative flex flex-col overflow-hidden rounded-3xl border p-0 text-left transition-all duration-200 group ` +
+              (selected
+                ? 'border-[#E83E8C] bg-[#E83E8C]/5 shadow-[0_0_20px_rgba(232,62,140,0.15)] ring-2 ring-[#E83E8C]'
+                : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100')
+            }
+          >
+            <div className="h-64 flex items-center justify-center bg-gray-200 overflow-hidden relative">
+              {tpl.imageUrl ? (
+                <img 
+                  src={tpl.imageUrl} 
+                  alt={tpl.name} 
+                  className="w-full h-full object-contain bg-white transition-transform duration-300 group-hover:scale-105" 
+                />
+              ) : (
+                <Camera size={32} className="opacity-30 text-gray-500" />
+              )}
+            </div>
+
+            <div className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-lg font-semibold text-black">{tpl.name}</p>
+                {tpl.tag ? (
+                  <span className="rounded-full bg-[#E83E8C] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white">
+                    {tpl.tag}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-3 text-sm text-black/60">{tpl.photoCount} foto per sesi</p>
+            </div>
+
+            {selected && (
+              <div className="pointer-events-none absolute inset-0 rounded-3xl border-2 border-[#E83E8C]" />
+            )}
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <MainLayout step={3} footerHint="Pilih template yang Anda sukai untuk mulai berfoto" headerLeftElement={timerElement}>
-      <div className="w-full max-w-5xl mx-auto flex flex-col gap-6 px-4 py-6">
+      <div className="w-full max-w-5xl mx-auto flex flex-col gap-8 px-4 py-6">
         <PageTitle
           title="Pilih Template"
           subtitle="Pilih frame yang paling sesuai dengan suasana foto Anda."
@@ -133,54 +217,48 @@ export default function TemplatesPage() {
             <Typography variant="body" className="text-black/50">Memuat template...</Typography>
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {cards.map((tpl) => {
-              const selected = tpl.id === selectedTemplateId;
-              return (
-                <motion.button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => handleSelect(tpl)}
-                  whileHover={{ y: -4 }}
-                  whileTap={{ scale: 0.98 }}
-                  transition={{ duration: 0.2 }}
-                  className={
-                    `relative flex flex-col overflow-hidden rounded-3xl border p-0 text-left transition-all duration-200 ` +
-                    (selected
-                      ? 'border-[#E83E8C] bg-[#E83E8C]/5 shadow-[0_0_20px_rgba(232,62,140,0.15)]'
-                      : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100')
-                  }
-                >
-                  <div className="h-64 flex items-center justify-center bg-gray-200 overflow-hidden relative">
-                    {tpl.imageUrl ? (
-                      <img 
-                        src={tpl.imageUrl} 
-                        alt={tpl.name} 
-                        className="w-full h-full object-contain bg-white" 
-                      />
-                    ) : (
-                      <Camera size={32} className="opacity-30 text-gray-500" />
-                    )}
-                  </div>
-
-                  <div className="p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-lg font-semibold text-black">{tpl.name}</p>
-                      {tpl.tag ? (
-                        <span className="rounded-full bg-[#E83E8C] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white">
-                          {tpl.tag}
+          <div className="flex flex-col gap-10">
+            {/* Section 1: Tutorial UPI */}
+            {upiCards.length > 0 && (
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center justify-between border-b border-pink-200 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-2 rounded-full bg-[#E83E8C]" />
+                    <div>
+                      <h2 className="text-xl font-bold text-black flex items-center gap-2">
+                        Tutorial UPI
+                        <span className="rounded-full bg-[#E83E8C]/10 text-[#E83E8C] px-2.5 py-0.5 text-xs font-semibold">
+                          {upiCards.length} Template
                         </span>
-                      ) : null}
+                      </h2>
+                      <p className="text-xs text-black/50">Template eksklusif sesi Tutorial UPI</p>
                     </div>
-                    <p className="mt-3 text-sm text-black/60">{tpl.photoCount} foto per sesi</p>
                   </div>
+                </div>
+                {renderTemplateGrid(upiCards)}
+              </section>
+            )}
 
-                  {selected && (
-                    <div className="pointer-events-none absolute inset-0 rounded-3xl border-2 border-[#E83E8C]" />
-                  )}
-                </motion.button>
-              );
-            })}
+            {/* Section 2: Template Lainnya */}
+            {otherCards.length > 0 && (
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-2 rounded-full bg-gray-400" />
+                    <div>
+                      <h2 className="text-xl font-bold text-black flex items-center gap-2">
+                        Template Lainnya
+                        <span className="rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-semibold">
+                          {otherCards.length} Template
+                        </span>
+                      </h2>
+                      <p className="text-xs text-black/50">Koleksi template umum</p>
+                    </div>
+                  </div>
+                </div>
+                {renderTemplateGrid(otherCards)}
+              </section>
+            )}
           </div>
         )}
 

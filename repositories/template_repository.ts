@@ -34,7 +34,7 @@ export class TemplateRepository {
       const templates = querySnap.docs.map((docSnap) => TemplateModel.fromFirestore(docSnap.id, docSnap.data()));
       
       // Urutkan berdasarkan nama di memori untuk menghindari kebutuhan composite index di Firestore
-      return templates.sort((a, b) => a.name.localeCompare(b.name));
+      return templates.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     } catch (e) {
       console.warn('[TemplateRepo] getActiveTemplates failed, using placeholders:', e);
       return TemplateModel.placeholders;

@@ -77,19 +77,22 @@ export class TemplateModel implements ITemplate {
    * Layout diambil dari layout-template-N.json di folder yang sama.
    */
   static get localTemplates(): TemplateModel[] {
-    return Array.from({ length: 8 }).map((_, i) => {
+    const photoCounts: Record<number, number> = {
+      1: 3, 2: 3, 3: 2, 4: 4, 5: 3, 6: 3, 7: 3, 8: 3,
+      9: 4, 10: 4, 11: 4, 12: 4, 13: 3, 14: 4, 15: 4, 16: 3, 17: 4, 18: 3, 19: 4,
+    };
+
+    return Array.from({ length: 19 }).map((_, i) => {
       const num = i + 1;
-      // template 1: 3, 2: 3, 3: 2, 4: 4, 5: 3, 6: 3, 7: 3, 8: 3
-      let count = 3;
-      if (num === 3) count = 2;
-      if (num === 4) count = 4;
+      const count = photoCounts[num] ?? 3;
+      const cdnUrl = `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/${num}.png`;
       
       return new TemplateModel({
         id: `local_template_${num}`,
         name: `Photo Booth ${num}`,
-        imageUrl: `/templates/${num}.png`,
-        thumbnail: `/templates/${num}.png`,
-        templateImage: `/templates/${num}.png`,
+        imageUrl: cdnUrl,
+        thumbnail: cdnUrl,
+        templateImage: cdnUrl,
         orientation: 'portrait',
         printSize: '4R',
         category: 'Photo Booth',
@@ -102,13 +105,13 @@ export class TemplateModel implements ITemplate {
   }
 
   /**
-   * Kembalikan path ke layout JSON lokal berdasarkan ID template lokal.
-   * Gunakan ini sebagai fallback jika Firestore tidak punya layout.
+   * Kembalikan path ke layout JSON berdasarkan ID template.
+   * Mengarah ke CDN GitHub sebagai fallback jika Firestore tidak punya layout.
    */
   static getLocalLayoutPath(templateId: string): string | null {
-    const match = templateId.match(/local_template_(\d+)/);
+    const match = templateId.match(/(?:local_)?template_(\d+)/);
     if (match) {
-      return `/templates/layout-template-${match[1]}.json`;
+      return `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/layout-template-${match[1]}.json`;
     }
     return null;
   }

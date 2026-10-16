@@ -123,6 +123,7 @@ export default function CameraPage() {
 
         streamRef.current = mediaStream;
         setStream(mediaStream);
+        setSupportMessage(null);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
           await videoRef.current.play();
@@ -261,14 +262,6 @@ export default function CameraPage() {
     router.push('/preview');
   };
 
-  const statusLabel = supportMessage
-    ? supportMessage
-    : countdown > 0
-    ? `Siap mengambil foto...`
-    : hasPhotos
-    ? `${photoSlots.length} / ${photoSlotsCount} foto diambil`
-    : 'Kamera siap. Tekan tombol untuk memulai.';
-
   const slotPreviews = useMemo(
     () => Array.from({ length: photoSlotsCount }, (_, index) => photoSlots[index] || null),
     [photoSlots, photoSlotsCount]
@@ -311,26 +304,12 @@ export default function CameraPage() {
             <div className="absolute inset-0 bg-white z-50 pointer-events-none" />
           )}
 
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-950/80" />
-
-          <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-4">
-            <div className="rounded-3xl border border-gray-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md">
-              <Typography variant="caption" className="text-black/60 uppercase tracking-[0.3em]">
-                Template
-              </Typography>
-              <Typography variant="label" className="mt-2 text-black">
-                {selectedTemplateName || 'Belum memilih template'}
-              </Typography>
+          {!stream && supportMessage && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/80 z-20">
+              <Camera size={48} className="text-white/40 mb-3" />
+              <p className="text-white font-medium max-w-sm">{supportMessage}</p>
             </div>
-            <div className="rounded-3xl border border-gray-200 bg-white/90 px-4 py-3 text-right shadow-sm backdrop-blur-md">
-              <Typography variant="caption" className="text-black/50 uppercase tracking-[0.3em]">
-                Status
-              </Typography>
-              <Typography variant="label" className="mt-2 text-black/80">
-                {statusLabel}
-              </Typography>
-            </div>
-          </div>
+          )}
 
           {countdown > 0 && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/50">
