@@ -17,7 +17,7 @@ export class SettingsModel implements ISettings {
     this.logoUrl = data.logoUrl ?? '';
     this.boothName = data.boothName ?? 'Sesijepret Photo Booth';
     this.photoCount = data.photoCount ?? 4;
-    this.printSize = data.printSize ?? '4R';
+    this.printSize = data.printSize ?? '2x6';
     this.emailEnabled = data.emailEnabled ?? true;
     this.printerEnabled = data.printerEnabled ?? true;
     this.autoDetectCamera = data.autoDetectCamera ?? true;
@@ -30,7 +30,7 @@ export class SettingsModel implements ISettings {
       logoUrl: data.logo_url || '',
       boothName: data.booth_name || 'Sesijepret Photo Booth',
       photoCount: typeof data.photo_count === 'number' ? data.photo_count : 4,
-      printSize: data.print_size || '4R',
+      printSize: data.print_size || '2x6',
       emailEnabled: data.email_enabled !== undefined ? !!data.email_enabled : true,
       printerEnabled: data.printer_enabled !== undefined ? !!data.printer_enabled : true,
       autoDetectCamera: data.auto_detect_camera !== undefined ? !!data.auto_detect_camera : true,

@@ -54,6 +54,24 @@ export const AppConstants = {
   screenPadding: 32.0,
   cardPadding: 24.0,
 
+  // Photo Booth Standard Strip Specification (2 x 6 inch @ 300 DPI)
+  photoStrip: {
+    name: 'Standard Photo Booth Strip',
+    widthInches: 2,
+    heightInches: 6,
+    widthMm: 50.8,
+    heightMm: 152.4,
+    widthCm: 5.08,
+    heightCm: 15.24,
+    widthPx: 600,
+    heightPx: 1800,
+    dpi: 300,
+    aspectRatio: '1:3',
+    // Spesifikasi untuk cetak 4R (2 strip berdampingan)
+    doubleStripWidthInches: 4,
+    doubleStripWidthPx: 1200,
+  },
+
   // Aturan Penggunaan
   rules: [
     '📸  Pastikan area foto bebas dari gangguan',

@@ -55,10 +55,9 @@ export class LayoutModel implements ILayout {
     return new LayoutModel({
       id: 'fallback',
       slots: [
-        new SlotModel({ slotNumber: 1, x: 55, y: 110, width: 420, height: 610, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
-        new SlotModel({ slotNumber: 2, x: 55, y: 760, width: 420, height: 610, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
-        new SlotModel({ slotNumber: 3, x: 55, y: 1410, width: 420, height: 610, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
-        new SlotModel({ slotNumber: 4, x: 55, y: 2060, width: 420, height: 610, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
+        new SlotModel({ slotNumber: 1, x: 70, y: 120, width: 460, height: 460, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
+        new SlotModel({ slotNumber: 2, x: 70, y: 620, width: 460, height: 460, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
+        new SlotModel({ slotNumber: 3, x: 70, y: 1120, width: 460, height: 460, rotation: 0, fit: 'cover', radius: 0, opacity: 1 }),
       ],
     });
   }
