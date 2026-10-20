@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -9,11 +9,11 @@ import PrimaryButton from '@/components/ui/PrimaryButton';
 import SecondaryButton from '@/components/ui/SecondaryButton';
 import Typography from '@/components/ui/Typography';
 import { ArrowLeft, Camera, Image as ImageIcon, RotateCcw } from 'lucide-react';
-import { AppConstants } from '@/constants/app_constants';
 
 import { useSessionStore } from '@/store/session_store';
 import { SessionRepository } from '@/repositories/session_repository';
 import { useSessionTimer } from '@/hooks/useSessionTimer';
+import { captureCanonPhoto, checkCanonCamera, getCanonPreview, photoBlobToDataUrl } from '@/services/canon_bridge_client';
 
 const sessionRepository = new SessionRepository();
 
@@ -24,33 +24,21 @@ interface PhotoSlot {
 
 export default function CameraPage() {
   const router = useRouter();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const previewPausedRef = useRef(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>([]);
   const [countdown, setCountdown] = useState<number>(0);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
   const [photoSlotsCount, setPhotoSlotsCount] = useState<number>(4);
 
   const sessionId = useSessionStore((state) => state.sessionId);
   const setCapturedPhotos = useSessionStore((state) => state.setCapturedPhotos);
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setStream(null);
-  }, []);
-
-  const canCapture = !!stream && !isCapturing && photoSlots.length < photoSlotsCount;
+  const canCapture = cameraReady && !isCapturing && photoSlots.length < photoSlotsCount;
   const hasPhotos = photoSlots.length > 0;
 
   useEffect(() => {
@@ -58,12 +46,12 @@ export default function CameraPage() {
     if (selected) {
       try {
         const parsed = JSON.parse(selected);
-        setSelectedTemplateName(parsed.name ?? null);
         if (parsed.photoCount) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setPhotoSlotsCount(parsed.photoCount);
         }
       } catch {
-        setSelectedTemplateName(null);
+        // Keep the default four slots if the saved template is invalid.
       }
     }
   }, []);
@@ -75,80 +63,94 @@ export default function CameraPage() {
         sessionRepository.updatePhotoCount({ sessionId, photoCount: photoSlots.length }).catch(console.error);
         sessionRepository.updateStage(sessionId, 'PHOTO_CAPTURED').catch(console.error);
       }
-      stopCamera();
       router.push('/edit-photo');
     } else {
-      stopCamera();
       router.push('/');
     }
   });
 
+  const handleFinish = useCallback(async () => {
+    setCapturedPhotos(photoSlots);
+    if (sessionId) {
+      try {
+        await sessionRepository.updatePhotoCount({ sessionId, photoCount: photoSlots.length });
+        await sessionRepository.updateStage(sessionId, 'PHOTO_CAPTURED');
+      } catch (error) {
+        console.error('Failed to update photo stats in Firestore:', error);
+      }
+    }
+    router.push('/preview');
+  }, [photoSlots, router, sessionId, setCapturedPhotos]);
+
   useEffect(() => {
     if (photoSlotsCount > 0 && photoSlots.length >= photoSlotsCount) {
       const t = setTimeout(() => {
-        handleFinish();
+        void handleFinish();
       }, 800);
       return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoSlots.length, photoSlotsCount]);
+  }, [photoSlots.length, photoSlotsCount, handleFinish]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const stopExistingStream = () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    };
-
-    const init = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setSupportMessage('Perangkat Anda tidak mendukung kamera web. Gunakan browser yang mendukung MediaDevices API.');
-        return;
-      }
-
+    let active = true;
+    let checking = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
       try {
-        stopExistingStream();
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false,
-        });
-
-        if (!isMounted) {
-          mediaStream.getTracks().forEach(track => track.stop());
-          return;
-        }
-
-        streamRef.current = mediaStream;
-        setStream(mediaStream);
-        setSupportMessage(null);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          await videoRef.current.play();
+        await checkCanonCamera();
+        if (active) {
+          setCameraReady(true);
+          setSupportMessage(null);
         }
       } catch (error) {
-        setSupportMessage('Tidak dapat mengakses kamera. Periksa izin browser dan coba lagi.');
+        if (active) {
+          setCameraReady(false);
+          setSupportMessage(error instanceof Error ? error.message : 'Kamera Canon belum siap.');
+        }
+      } finally {
+        checking = false;
       }
     };
-
-    init();
-
-    return () => {
-      isMounted = false;
-      stopCamera();
-    };
-  }, [stopCamera]);
+    void check();
+    const timer = window.setInterval(check, 2500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
+    if (!cameraReady) return;
+    let active = true;
+    const controller = new AbortController();
+    const poll = async () => {
+      while (active) {
+        if (!previewPausedRef.current) {
+          try {
+            const blob = await getCanonPreview(controller.signal);
+            if (!active) break;
+            const nextUrl = URL.createObjectURL(blob);
+            const previousUrl = previewUrlRef.current;
+            previewUrlRef.current = nextUrl;
+            setPreviewUrl(nextUrl);
+            if (previousUrl) window.setTimeout(() => URL.revokeObjectURL(previousUrl), 500);
+          } catch {
+            // A temporary live-view frame failure does not prevent shutter capture.
+          }
+        }
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+      }
+    };
+    void poll();
+    return () => {
+      active = false;
+      controller.abort();
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+      setPreviewUrl(null);
+    };
+  }, [cameraReady]);
 
   const capturePhoto = async () => {
-    if (!videoRef.current || !canvasRef.current || !stream || isCapturing) return;
+    if (!cameraReady || isCapturing) return;
 
     setIsCapturing(true);
 
@@ -176,90 +178,30 @@ export default function CameraPage() {
       shutterAudio.play().catch(() => {
         // Ignore autoplay errors
       });
-    } catch (e) {
+    } catch {
       // Ignore audio creation errors
     }
     setTimeout(() => {
       setShowFlash(false);
     }, 150);
 
-    let dataUrl = '';
-    const track = streamRef.current?.getVideoTracks()[0];
-
-    // Coba gunakan ImageCapture API (untuk benar-benar memfoto dari hardware)
     try {
-      // @ts-ignore - ImageCapture mungkin tidak dikenali oleh TS standar
-      if (track && typeof ImageCapture !== 'undefined') {
-        // @ts-ignore
-        const imageCapture = new ImageCapture(track);
-        const blob = await imageCapture.takePhoto();
-        
-        // Konversi blob ke base64 (DataURL)
-        const reader = new FileReader();
-        dataUrl = await new Promise<string>((resolve, reject) => {
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      }
-    } catch (e) {
-      console.warn('ImageCapture failed atau tidak didukung, menggunakan fallback canvas:', e);
+      previewPausedRef.current = true;
+      const jpeg = await captureCanonPhoto();
+      const dataUrl = await photoBlobToDataUrl(jpeg);
+      setPhotoSlots((prev) => [...prev, { id: `${Date.now()}`, dataUrl }].slice(-photoSlotsCount));
+      setSupportMessage(null);
+    } catch (error) {
+      setSupportMessage(error instanceof Error ? error.message : 'Gagal memotret dengan EOS M50.');
+      setCameraReady(false);
+    } finally {
+      previewPausedRef.current = false;
+      setIsCapturing(false);
     }
-
-    // Jika ImageCapture gagal atau tidak didukung, fallback ke metode Canvas (grab frame)
-    if (!dataUrl) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      let width = video.videoWidth || 1280;
-      let height = video.videoHeight || 720;
-
-      if (track) {
-        const settings = track.getSettings();
-        if (settings.width && settings.height) {
-          width = settings.width;
-          height = settings.height;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-
-      if (!context) {
-        setIsCapturing(false);
-        return;
-      }
-
-      context.drawImage(video, 0, 0, width, height);
-      dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    }
-
-    setPhotoSlots((prev) => {
-      const next = [...prev, { id: `${Date.now()}`, dataUrl }];
-      return next.slice(-photoSlotsCount);
-    });
-    setIsCapturing(false);
   };
 
   const removeLastPhoto = () => {
     setPhotoSlots((prev) => prev.slice(0, -1));
-  };
-
-  const handleFinish = async () => {
-    setCapturedPhotos(photoSlots);
-    
-    if (sessionId) {
-      try {
-        await sessionRepository.updatePhotoCount({ sessionId, photoCount: photoSlots.length });
-        await sessionRepository.updateStage(sessionId, 'PHOTO_CAPTURED');
-      } catch (e) {
-        console.error('Failed to update photo stats in Firestore:', e);
-      }
-    }
-    
-    stopCamera();
-    router.push('/preview');
   };
 
   const slotPreviews = useMemo(
@@ -291,23 +233,26 @@ export default function CameraPage() {
           className="relative flex-1 rounded-[32px] border border-gray-200 overflow-hidden bg-black shadow-lg"
           style={{ minHeight: '26rem' }}
         >
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            playsInline
-            muted
-            autoPlay
-            disablePictureInPicture
-          />
+          {previewUrl && (
+            // Live view arrives as a changing local Blob URL; Next Image optimization is not applicable.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="Pratinjau langsung Canon EOS M50" className="w-full h-full object-cover" />
+          )}
 
           {showFlash && (
             <div className="absolute inset-0 bg-white z-50 pointer-events-none" />
           )}
 
-          {!stream && supportMessage && (
+          {supportMessage && (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/80 z-20">
               <Camera size={48} className="text-white/40 mb-3" />
               <p className="text-white font-medium max-w-sm">{supportMessage}</p>
+            </div>
+          )}
+
+          {!previewUrl && !supportMessage && (
+            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+              Menyiapkan pratinjau Canon EOS M50...
             </div>
           )}
 
@@ -324,7 +269,6 @@ export default function CameraPage() {
             </div>
           )}
 
-          <canvas ref={canvasRef} className="hidden" />
         </motion.div>
 
         <motion.div
@@ -340,6 +284,8 @@ export default function CameraPage() {
                 className="aspect-square overflow-hidden rounded-3xl border border-gray-200 bg-gray-50 flex items-center justify-center shadow-sm"
               >
                 {slot ? (
+                  // Captured photos are in-memory data URLs until the session is composed.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={slot.dataUrl} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-2 text-black/30 px-3 text-center">
