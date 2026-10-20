@@ -6,11 +6,14 @@ browser talks only to 127.0.0.1; Canon EDSDK controls the real shutter.
 
 import argparse
 import ctypes as C
+from concurrent.futures import Future, TimeoutError as FutureTimeout
 import json
 import os
+from queue import Queue
+import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
@@ -269,9 +272,50 @@ class CanonCamera:
             self.initialized = False
 
 
+class CameraWorker:
+    """Keep every EDSDK call on one thread while HTTP clients run independently."""
+
+    def __init__(self, camera):
+        self.camera = camera
+        self.jobs = Queue()
+        self.thread = threading.Thread(target=self._run, name="canon-edsdk", daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        while True:
+            job = self.jobs.get()
+            if job is None:
+                break
+            operation, future = job
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                future.set_result(getattr(self.camera, operation)())
+            except Exception as exc:
+                future.set_exception(exc)
+        self.camera.disconnect()
+
+    def call(self, operation, timeout):
+        future = Future()
+        self.jobs.put((operation, future))
+        try:
+            return future.result(timeout=timeout)
+        except FutureTimeout:
+            future.cancel()
+            raise CameraError("Kamera belum merespons. Periksa kabel USB dan mode foto, lalu coba lagi.")
+
+    def close(self):
+        self.jobs.put(None)
+        self.thread.join(timeout=5)
+
+
 class BridgeHandler(BaseHTTPRequestHandler):
     camera = None
     origins = DEFAULT_ORIGINS
+
+    def setup(self):
+        self.request.settimeout(8)
+        super().setup()
 
     def log_message(self, format, *args):
         if getattr(self, "path", "") == "/capture" or (len(args) > 1 and str(args[1]).startswith(("4", "5"))):
@@ -317,10 +361,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         try:
             if self.path == "/health":
-                self.camera.connect()
+                self.camera.call("connect", timeout=8)
                 self._json(200, ready=True, model="Canon EOS M50", source="EDSDK")
             elif self.path == "/preview":
-                self._send(200, "image/jpeg", self.camera.preview())
+                self._send(200, "image/jpeg", self.camera.call("preview", timeout=8))
             else:
                 self._json(404, error="Endpoint tidak ditemukan")
         except CameraError as exc:
@@ -334,7 +378,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json(404, error="Endpoint tidak ditemukan")
             return
         try:
-            data, filename = self.camera.capture()
+            data, filename = self.camera.call("capture", timeout=30)
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Content-Length", str(len(data)))
@@ -360,16 +404,17 @@ def main():
     args = parser.parse_args()
     if not args.dll.is_file():
         parser.error(f"EDSDK.dll tidak ditemukan: {args.dll}")
-    BridgeHandler.camera = CanonCamera(args.dll, Path(__file__).parent / "captures")
+    BridgeHandler.camera = CameraWorker(CanonCamera(args.dll, Path(__file__).parent / "captures"))
     BridgeHandler.origins = DEFAULT_ORIGINS | set(args.origin)
-    server = HTTPServer(("127.0.0.1", args.port), BridgeHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), BridgeHandler)
+    server.daemon_threads = True
     print(f"SesiJepret camera bridge: http://127.0.0.1:{args.port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        BridgeHandler.camera.disconnect()
+        BridgeHandler.camera.close()
         server.server_close()
 
 
