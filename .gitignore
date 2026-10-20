@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/bridge/captures/
+/bridge/__pycache__/
+/bridge/*.log
