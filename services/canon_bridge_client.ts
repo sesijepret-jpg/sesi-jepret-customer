@@ -9,10 +9,13 @@ async function bridgeError(response: Response): Promise<Error> {
   }
 }
 
-export async function checkCanonCamera(signal?: AbortSignal): Promise<void> {
+export async function checkCanonCamera(): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${BRIDGE_URL}/health`, { cache: 'no-store', signal });
+    response = await fetch(`${BRIDGE_URL}/health`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
   } catch {
     throw new Error('Kamera lokal belum terhubung. Jalankan SesiJepret Camera Bridge dan izinkan akses jaringan lokal untuk website ini di browser.');
   }
@@ -20,7 +23,11 @@ export async function checkCanonCamera(signal?: AbortSignal): Promise<void> {
 }
 
 export async function getCanonPreview(signal?: AbortSignal): Promise<Blob> {
-  const response = await fetch(`${BRIDGE_URL}/preview`, { cache: 'no-store', signal });
+  const timeout = AbortSignal.timeout(5000);
+  const response = await fetch(`${BRIDGE_URL}/preview`, {
+    cache: 'no-store',
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
   if (!response.ok) throw await bridgeError(response);
   return response.blob();
 }
@@ -32,6 +39,7 @@ export async function captureCanonPhoto(): Promise<Blob> {
       method: 'POST',
       headers: { 'X-SesiJepret-Bridge': '1' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(35000),
     });
   } catch {
     throw new Error('Koneksi ke aplikasi kamera lokal terputus.');
