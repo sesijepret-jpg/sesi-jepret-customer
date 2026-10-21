@@ -9,6 +9,7 @@ import ctypes as C
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 import json
 import os
+import sys
 from queue import Queue
 import threading
 import time
@@ -139,6 +140,18 @@ class CanonCamera:
         self.liveview_on = enabled
 
     def preview(self):
+        try:
+            return self._preview_frame()
+        except CameraError as exc:
+            # EDS_ERR_COMM_DISCONNECTED can leave a stale SDK session that still
+            # answers property reads. Reopen it once before reporting failure.
+            if "0x000000C1" not in str(exc):
+                raise
+            print("Koneksi live view Canon terputus; membuka ulang sesi kamera", flush=True)
+            self.disconnect()
+            return self._preview_frame()
+
+    def _preview_frame(self):
         self.connect()
         if not self.liveview_on:
             self._set_liveview(True)
@@ -440,6 +453,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    if sys.stdout is None or sys.stderr is None:
+        log = open(Path(__file__).with_name("bridge.log"), "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = log
+        if sys.stderr is None:
+            sys.stderr = log
     parser = argparse.ArgumentParser(description="SesiJepret Canon EOS camera bridge")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--dll", type=Path, default=Path(os.environ.get("SESI_JEPRET_EDSDK_DLL", DEFAULT_DLL)))

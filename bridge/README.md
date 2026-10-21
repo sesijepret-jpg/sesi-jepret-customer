@@ -9,6 +9,8 @@ Bridge ini harus berjalan di **komputer Windows yang terhubung langsung ke EOS M
 3. Jalankan `start-camera-bridge.cmd`, atau `python canon_bridge.py`. Biarkan jendelanya terbuka selama sesi photobooth.
 4. Buka website SesiJepret di **komputer yang sama**. Halaman kamera akan mendeteksi bridge secara otomatis. Jika domain website berubah, jalankan bridge dengan `--origin https://domain-baru.example`.
 
+Untuk komputer kios yang sama setiap hari, jalankan `install-startup.ps1 -PythonPath "C:\path\ke\python.exe"` sekali. Ini memasang tugas Windows untuk menjalankan bridge otomatis saat pengguna masuk. Periksa dengan `curl.exe http://127.0.0.1:8765/health` sebelum menerima pelanggan. Jangan membuka `start-camera-bridge.cmd` bersamaan dengan tugas tersebut karena keduanya memakai port yang sama.
+
 Pada Chrome versi baru, website publik yang menghubungi `127.0.0.1` dapat memunculkan permintaan izin **Local network access**. Izinkan untuk domain SesiJepret agar browser dapat menghubungi bridge. Jangan menonaktifkan perlindungan browser.
 
 `GET /health` memeriksa sesi kamera, `GET /preview` mengirim frame live view JPEG, dan `POST /capture` memotret melalui shutter Canon lalu mengirim JPEG asli. Bridge hanya mendengarkan di `127.0.0.1` dan hanya menerima permintaan browser dari origin yang diizinkan. Tombol foto akan menampilkan kesalahan bila bridge atau kamera tidak tersedia, tanpa diam-diam menyimpan frame webcam.

@@ -29,6 +29,7 @@ export default function CameraPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [showFlash, setShowFlash] = useState(false);
   const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>([]);
   const [countdown, setCountdown] = useState<number>(0);
@@ -121,22 +122,34 @@ export default function CameraPage() {
     if (!cameraReady) return;
     let active = true;
     const controller = new AbortController();
+    let failedFrames = 0;
     const poll = async () => {
       while (active) {
+        let delay = 250;
         if (!previewPausedRef.current) {
           try {
             const blob = await getCanonPreview(controller.signal);
             if (!active) break;
+            failedFrames = 0;
+            setPreviewError(null);
             const nextUrl = URL.createObjectURL(blob);
             const previousUrl = previewUrlRef.current;
             previewUrlRef.current = nextUrl;
             setPreviewUrl(nextUrl);
             if (previousUrl) window.setTimeout(() => URL.revokeObjectURL(previousUrl), 500);
-          } catch {
-            // A temporary live-view frame failure does not prevent shutter capture.
+          } catch (error) {
+            if (!active) break;
+            failedFrames += 1;
+            delay = 1000;
+            if (failedFrames >= 3) {
+              setPreviewError(error instanceof Error ? error.message : 'Pratinjau kamera belum siap.');
+              if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+              previewUrlRef.current = null;
+              setPreviewUrl(null);
+            }
           }
         }
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+        await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
       }
     };
     void poll();
@@ -243,10 +256,10 @@ export default function CameraPage() {
             <div className="absolute inset-0 bg-white z-50 pointer-events-none" />
           )}
 
-          {supportMessage && (
+          {(supportMessage || previewError) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/80 z-20">
               <Camera size={48} className="text-white/40 mb-3" />
-              <p className="text-white font-medium max-w-sm">{supportMessage}</p>
+              <p className="text-white font-medium max-w-sm">{supportMessage || previewError}</p>
             </div>
           )}
 
