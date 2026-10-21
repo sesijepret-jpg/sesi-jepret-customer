@@ -34,6 +34,19 @@ async function storeLocalPhoto(key: string, blob: Blob): Promise<void> {
   });
 }
 
+async function getLatestLocalPhoto(sessionId: string): Promise<Blob | null> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('local_photos', 'readonly');
+    const prefix = `${sessionId}/`;
+    const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+    const request = tx.objectStore('local_photos').openCursor(range, 'prev');
+    request.onsuccess = () => resolve((request.result?.value as Blob | undefined) || null);
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
 async function deleteLocalPhotos(prefix: string): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
@@ -73,6 +86,11 @@ export class StorageService {
 
   constructor(storage?: FirebaseStorage) {
     this.storage = storage || dbStorage;
+  }
+
+  /** Restore the final PNG after refreshing the print page. */
+  async getLatestLocalPhoto(sessionId: string): Promise<Blob | null> {
+    return getLatestLocalPhoto(sessionId);
   }
 
   /**
@@ -135,8 +153,8 @@ export class StorageService {
   }): Promise<string> {
     const { sessionId, imageBytes } = params;
     try {
-      const blob = new Blob([imageBytes.buffer as ArrayBuffer], { type: 'image/jpeg' });
-      const fileName = `photo_${Date.now()}.jpg`;
+      const blob = new Blob([imageBytes.buffer as ArrayBuffer], { type: 'image/png' });
+      const fileName = `photo_${Date.now()}.png`;
       const key = `${sessionId}/${fileName}`;
 
       // Save to IndexedDB for offline persistence

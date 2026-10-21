@@ -42,3 +42,4 @@ next-env.d.ts
 /bridge/captures/
 /bridge/__pycache__/
 /bridge/*.log
+/bridge/print_state.json
