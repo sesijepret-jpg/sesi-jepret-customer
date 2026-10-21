@@ -105,28 +105,28 @@ export default function PrintPage() {
   };
 
   return (
-    <MainLayout step={6} footerHint="Satu sesi mendapat dua strip pada satu lembar A5 glossy.">
+    <MainLayout step={6} footerHint="Satu sesi mendapat dua strip sekitar 6 × 18 cm pada satu lembar A5 glossy.">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4">
         <PageTitle
           title={hasPrinted ? 'Foto Dikirim ke Printer' : 'Cetak Foto Booth'}
-          subtitle="Dua strip 2 × 6 inci dicetak langsung melalui Canon pada satu lembar A5 glossy."
+          subtitle="Dua strip sekitar 6 × 18 cm dicetak langsung melalui Canon pada satu lembar A5 glossy."
         />
 
         <div className="grid gap-6 md:grid-cols-[1fr_1fr]">
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-500">
               <span>Pratinjau hasil</span>
-              <span>2 strip · 300 DPI</span>
+              <span>2 strip · 6 × 18 cm</span>
             </div>
-            <div className="mx-auto flex aspect-[148.5/210] max-h-[480px] items-center justify-center rounded-xl border border-gray-200 bg-white p-[12%] shadow-inner">
+            <div className="mx-auto flex aspect-[148.5/210] max-h-[480px] items-center justify-center rounded-xl border border-gray-200 bg-white p-[8%] shadow-inner">
               {photo ? (
-                <div className="flex h-full max-h-[330px] aspect-[2/3] overflow-hidden border border-gray-200">
+                <div className="flex h-full max-h-[400px] aspect-[2/3] overflow-hidden border border-gray-200">
                   <img src={photo} alt="Strip pertama" className="h-full w-1/2 object-fill" />
                   <img src={photo} alt="Strip kedua" className="h-full w-1/2 border-l border-dashed border-gray-400 object-fill" />
                 </div>
               ) : <span className="text-sm text-gray-400">Foto belum siap</span>}
             </div>
-            <p className="mt-4 text-center text-xs text-gray-500">Kertas A5 148,5 × 210 mm · bidang foto 4 × 6 inci</p>
+            <p className="mt-4 text-center text-xs text-gray-500">Kertas A5 148,5 × 210 mm · dua strip sekitar 6 × 18 cm</p>
           </div>
 
           <div className="flex flex-col gap-5 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
