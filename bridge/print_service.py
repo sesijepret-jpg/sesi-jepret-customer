@@ -1,4 +1,4 @@
-"""Windows print spooler adapter for two 2x6 inch strips on pre-cut A5."""
+"""Windows print spooler adapter for two proportional 6x18 cm strips on A5."""
 
 from io import BytesIO
 from pathlib import Path
@@ -11,6 +11,7 @@ from PIL import Image
 PRINTER_NAME = "Canon iP2700 series"
 A5_PX = (1754, 2480)  # A5 at 300 dpi
 STRIP_PX = (600, 1800)
+PANEL_PX = (1417, 2126)  # Two 60x180 mm strips at 300 dpi
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
 
@@ -49,6 +50,7 @@ def create_a5_page(strip_png: bytes) -> Image.Image:
     panel = Image.new("RGB", (1200, 1800), "white")
     panel.paste(strip, (0, 0))
     panel.paste(strip, (600, 0))
+    panel = panel.resize(PANEL_PX, Image.Resampling.LANCZOS)
     page = Image.new("RGB", A5_PX, "white")
     page.paste(panel, ((A5_PX[0] - panel.width) // 2, (A5_PX[1] - panel.height) // 2))
     return page

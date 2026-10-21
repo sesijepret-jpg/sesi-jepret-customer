@@ -17,7 +17,7 @@ Website yang dibuka di ponsel atau tablet lain tidak dapat mengakses bridge di k
 
 ## Cetak dua strip langsung pada A5
 
-Potong satu lembar A4 menjadi **dua lembar A5 (148,5 × 210 mm)** sebelum dipakai. Setiap sesi memakai satu A5 dan mencetak **dua strip 2 × 6 inci** berdampingan pada bidang 4 × 6 inci di tengahnya. Masukkan sisi glossy menghadap arah cetak yang ditunjukkan tray Canon. Jangan gunakan fitur `pages per sheet` Chrome.
+Potong satu lembar A4 menjadi **dua lembar A5 (148,5 × 210 mm)** sebelum dipakai. Setiap sesi memakai satu A5 dan mencetak **dua strip sekitar 6 × 18 cm** berdampingan. Desain sumber 2 × 6 inci diperbesar **secara proporsional**, sehingga wajah dan teks tidak tertarik memanjang. Bidang foto 12 × 18 cm berada di tengah A5. Masukkan sisi glossy menghadap arah cetak yang ditunjukkan tray Canon. Jangan gunakan fitur `pages per sheet` Chrome.
 
 Bridge memakai printer Windows bernama `Canon iP2700 series` (nama driver untuk perangkat iP2770 yang terpasang di komputer ini). `GET /print-status` memeriksa bridge; `POST /print` mengirim PNG final ke Windows print spooler tanpa dialog Chrome. Pekerjaan menggunakan **A5, portrait, warna, kualitas High, satu salinan**. Bila profil glossy driver menyembunyikan A5 dari daftar ukurannya, bridge meminta ukuran A5 terpotong sebagai ukuran khusus 5,85 × 8,27 inci. Pengaturan jenis media Canon yang tidak ada di API Windows standar mengikuti **Printing Preferences** driver. Atur sekali di Windows: pilih media glossy yang sesuai dengan kertas, kualitas foto, lalu simpan sebagai preferensi printer. Bridge tidak mengubah preferensi itu setiap sesi.
 
