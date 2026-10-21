@@ -15,6 +15,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from print_service import PrintError, check_printer, print_strip, PRINTER_NAME, MAX_IMAGE_BYTES
 
 
 DEFAULT_DLL = r"C:\Program Files\Canon\EOS Webcam Utility Pro\EDSDK.dll"
@@ -312,6 +313,21 @@ class CameraWorker:
 class BridgeHandler(BaseHTTPRequestHandler):
     camera = None
     origins = DEFAULT_ORIGINS
+    print_lock = threading.Lock()
+    print_state_path = Path(__file__).with_name("print_state.json")
+
+    @classmethod
+    def _print_state(cls):
+        try:
+            return json.loads(cls.print_state_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValueError):
+            return {"printed_sessions": []}
+
+    @classmethod
+    def _save_print_state(cls, state):
+        temporary = cls.print_state_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(state), encoding="utf-8")
+        temporary.replace(cls.print_state_path)
 
     def setup(self):
         self.request.settimeout(8)
@@ -350,7 +366,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", ""))
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "X-SesiJepret-Bridge, Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "X-SesiJepret-Bridge, X-SesiJepret-Session, Content-Type")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Vary", "Origin")
         self.end_headers()
@@ -363,16 +379,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
             if self.path == "/health":
                 self.camera.call("connect", timeout=8)
                 self._json(200, ready=True, model="Canon EOS M50", source="EDSDK")
+            elif self.path == "/print-status":
+                check_printer()
+                self._json(200, ready=True, printer=PRINTER_NAME)
             elif self.path == "/preview":
                 self._send(200, "image/jpeg", self.camera.call("preview", timeout=8))
             else:
                 self._json(404, error="Endpoint tidak ditemukan")
-        except CameraError as exc:
+        except (CameraError, PrintError) as exc:
             self._json(503, ready=False, error=str(exc))
 
     def do_POST(self):
         if not self._origin_allowed() or self.headers.get("X-SesiJepret-Bridge") != "1":
             self._json(403, error="Permintaan tidak diizinkan")
+            return
+        if self.path == "/print":
+            self._handle_print()
             return
         if self.path != "/capture":
             self._json(404, error="Endpoint tidak ditemukan")
@@ -393,6 +415,27 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         except CameraError as exc:
+            self._json(503, error=str(exc))
+
+    def _handle_print(self):
+        try:
+            session = self.headers.get("X-SesiJepret-Session", "")
+            if not session or len(session) > 100 or not all(c.isalnum() or c in "-_" for c in session):
+                raise PrintError("ID sesi cetak tidak valid")
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1000 or length > MAX_IMAGE_BYTES:
+                raise PrintError("Ukuran file cetak tidak valid")
+            image = self.rfile.read(length)
+            with self.print_lock:
+                state = self._print_state()
+                printed_sessions = state.get("printed_sessions", [])
+                if session in printed_sessions:
+                    self._json(200, accepted=True, already_sent=True)
+                    return
+                print_strip(image)
+                self._save_print_state({"printed_sessions": (printed_sessions + [session])[-200:]})
+            self._json(200, accepted=True, already_sent=False)
+        except (PrintError, ValueError) as exc:
             self._json(503, error=str(exc))
 
 
