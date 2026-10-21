@@ -102,9 +102,13 @@ class CanonCamera:
     def connect(self):
         if self.camera.value:
             current = self.u32()
-            if self.get_property(self.camera, SAVE_TO, 0, 4, C.byref(current)) == 0:
+            try:
+                still_connected = self.get_property(self.camera, SAVE_TO, 0, 4, C.byref(current)) == 0
+            except OSError:
+                still_connected = False
+            if still_connected:
                 return
-            self.disconnect()
+            self.disconnect(broken=True)
         if not self.initialized:
             self._check("Inisialisasi SDK", self.initialize())
             self.initialized = True
@@ -148,7 +152,7 @@ class CanonCamera:
             if "0x000000C1" not in str(exc):
                 raise
             print("Koneksi live view Canon terputus; membuka ulang sesi kamera", flush=True)
-            self.disconnect()
+            self.disconnect(broken=True)
             return self._preview_frame()
 
     def _preview_frame(self):
@@ -272,17 +276,26 @@ class CanonCamera:
             except CameraError as exc:
                 print(f"Live view belum pulih: {exc}", flush=True)
 
-    def disconnect(self):
+    def disconnect(self, broken=False):
         if self.camera.value:
-            if self.liveview_on:
-                value = self.u32(self.original_evf.value)
-                self.set_property(self.camera, EVF_OUTPUT, 0, 4, C.byref(value))
-            self.close_session(self.camera)
-            self.release(self.camera)
+            if not broken:
+                try:
+                    if self.liveview_on:
+                        value = self.u32(self.original_evf.value)
+                        self.set_property(self.camera, EVF_OUTPUT, 0, 4, C.byref(value))
+                    self.close_session(self.camera)
+                    self.release(self.camera)
+                except OSError:
+                    # A detached USB device can invalidate the SDK pointer.
+                    # Terminate the SDK below rather than dereferencing it again.
+                    pass
             self.camera = self.ptr()
         self.liveview_on = False
         if self.initialized:
-            self.terminate()
+            try:
+                self.terminate()
+            except OSError:
+                pass
             self.initialized = False
 
 
