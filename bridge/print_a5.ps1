@@ -15,7 +15,9 @@ try {
     if ($CheckOnly) { Write-Output 'READY'; return }
     if (-not $ImagePath -or -not (Test-Path -LiteralPath $ImagePath)) { throw 'File cetak tidak ditemukan.' }
     $a5 = $document.PrinterSettings.PaperSizes | Where-Object Kind -EQ A5 | Select-Object -First 1
-    if ($null -eq $a5) { throw "Driver printer tidak menyediakan ukuran A5." }
+    # Canon's glossy profile may hide A5 from its advertised list even though
+    # the device supports A5. Request the exact cut size as a custom form.
+    if ($null -eq $a5) { $a5 = New-Object System.Drawing.Printing.PaperSize('SesiJepret A5', 585, 827) }
     $document.DefaultPageSettings.PaperSize = $a5
     $document.DefaultPageSettings.Landscape = $false
     $document.DefaultPageSettings.Color = $true
