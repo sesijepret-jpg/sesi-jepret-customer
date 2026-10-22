@@ -88,7 +88,7 @@ export class TemplateModel implements ITemplate {
     return Array.from({ length: 29 }).map((_, i) => {
       const num = i + 1;
       const count = photoCounts[num] ?? 3;
-      const cdnUrl = `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/${num}.png`;
+      const cdnUrl = `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/${num}.png?v=20261022b`;
       const isUpi = upiTemplates.includes(num);
 
       return new TemplateModel({
@@ -115,7 +115,7 @@ export class TemplateModel implements ITemplate {
   static getLocalLayoutPath(templateId: string): string | null {
     const match = templateId.match(/(?:local_)?template_(\d+)/);
     if (match) {
-      return `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/layout-template-${match[1]}.json`;
+      return `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/layout-template-${match[1]}.json?v=20261022b`;
     }
     return null;
   }

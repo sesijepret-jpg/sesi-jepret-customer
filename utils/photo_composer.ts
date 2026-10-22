@@ -146,7 +146,8 @@ export class PhotoComposer {
     ctx.fillRect(0, 0, width, height);
 
     // ── 2. Load template image (if any) ──────────────────────────────────
-    const overlayUrl = template.templateImage || template.imageUrl;
+    const rawOverlayUrl = template.templateImage || template.imageUrl;
+    const overlayUrl = (rawOverlayUrl && (rawOverlayUrl.startsWith("http://") || rawOverlayUrl.startsWith("https://")) && !rawOverlayUrl.includes("?v=")) ? `${rawOverlayUrl}?v=20261022b` : rawOverlayUrl;
     let overlayImg: HTMLImageElement | null = null;
     if (overlayUrl) {
       try {
