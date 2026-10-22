@@ -11,7 +11,8 @@ import PageTitle from '@/components/ui/PageTitle';
 import Card from '@/components/ui/Card';
 import Typography from '@/components/ui/Typography';
 import LoadingOverlay from '@/components/ui/LoadingOverlay';
-import { ArrowLeft, Sparkles, Check } from 'lucide-react';
+import { ArrowLeft, Sparkles, Check, RefreshCcw, AlertTriangle } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
 import { useSessionStore } from '@/store/session_store';
 import { SessionRepository } from '@/repositories/session_repository';
 import { TemplateService } from '@/services/template_service';
@@ -45,6 +46,8 @@ export default function EditPhotoPage() {
   const [layout, setLayout] = useState<LayoutModel | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [generatingPreview, setGeneratingPreview] = useState(false);
+  const [showRetakeModal, setShowRetakeModal] = useState(false);
+  const [isRetaking, setIsRetaking] = useState(false);
 
   // Hentikan timer ketika masuk halaman edit
   useSessionTimer(true);
@@ -157,6 +160,34 @@ export default function EditPhotoPage() {
     generatePreview();
     return () => { isMounted = false; };
   }, [template, layout, capturedPhotos, selectedFilter]);
+
+  const handleRetakeConfirm = async () => {
+    setIsRetaking(true);
+    try {
+      useSessionStore.getState().setCapturedPhotos([]);
+      useSessionStore.getState().setComposedPhotoBase64(null);
+      useSessionStore.getState().setComposedPhotoBlobUrl(null);
+      useSessionStore.getState().setUploadedPhotoUrl(null);
+
+      if (sessionId) {
+        try {
+          await sessionRepository.updatePhotoCount({ sessionId, photoCount: 0 });
+          await sessionRepository.updateStage(sessionId, 'STARTED');
+        } catch (e) {
+          console.error('Failed to reset photo count in Firestore:', e);
+        }
+      }
+
+      toast.success('Silakan ambil foto ulang!');
+      router.push('/camera');
+    } catch (e) {
+      console.error('Failed to retake photos:', e);
+      toast.error('Gagal mengatur ulang sesi foto.');
+    } finally {
+      setIsRetaking(false);
+      setShowRetakeModal(false);
+    }
+  };
 
   const handleSaveAndContinue = async () => {
     setProcessing(true);
@@ -306,16 +337,69 @@ export default function EditPhotoPage() {
                 size="md"
                 fullWidth
                 onClick={handleSaveAndContinue}
-                disabled={processing}
+                disabled={processing || isRetaking}
                 loading={processing}
               >
                 <Check size={16} />
                 Terapkan & Lanjut
               </PrimaryButton>
+
+              <button
+                type="button"
+                onClick={() => setShowRetakeModal(true)}
+                disabled={processing || isRetaking}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-black/80 hover:bg-gray-100 hover:border-gray-300 transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCcw size={16} />
+                Foto Ulang
+              </button>
             </div>
           </motion.div>
         </div>
       </div>
+
+      {/* Modal Konfirmasi Foto Ulang */}
+      <Modal
+        open={showRetakeModal}
+        onClose={() => !isRetaking && setShowRetakeModal(false)}
+        title="Ambil Ulang Foto?"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                Apakah Anda yakin ingin mengambil foto ulang?
+              </p>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                Semua foto yang sudah diambil pada sesi ini akan diatur ulang, dan Anda akan diarahkan kembali ke layar kamera untuk mengambil foto baru dengan template yang sama.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              disabled={isRetaking}
+              onClick={() => setShowRetakeModal(false)}
+              className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              disabled={isRetaking}
+              onClick={handleRetakeConfirm}
+              className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCcw size={14} className={isRetaking ? 'animate-spin' : ''} />
+              {isRetaking ? 'Mereset...' : 'Ya, Foto Ulang'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <LoadingOverlay visible={processing} message="Menerapkan efek filter pada foto..." />
     </MainLayout>

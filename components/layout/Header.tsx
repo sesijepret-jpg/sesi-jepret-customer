@@ -14,7 +14,7 @@ const STEP_LABELS = [
   'Aturan',
   'Template',
   'Kamera',
-  'Preview',
+  'Edit',
   'Kirim',
   'Selesai',
 ];

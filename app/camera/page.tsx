@@ -89,7 +89,7 @@ export default function CameraPage() {
         console.error('Failed to update photo stats in Firestore:', error);
       }
     }
-    router.push('/preview');
+    router.push('/edit-photo');
   }, [photoSlots, router, sessionId, setCapturedPhotos]);
 
   useEffect(() => {
