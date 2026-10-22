@@ -79,7 +79,7 @@ export default function TemplatesPage() {
     }));
   }, [templates]);
 
-  const TUTORIAL_UPI_NUMBERS = [11, 13, 14, 15, 16];
+  const TUTORIAL_UPI_NUMBERS = [21, 22, 23, 25, 26];
 
   const getTemplateNum = (tpl: TemplateCard) => {
     const match = tpl.id.match(/\d+/) || tpl.name.match(/\d+/);
@@ -107,6 +107,8 @@ export default function TemplatesPage() {
       const orderB = TUTORIAL_UPI_NUMBERS.indexOf(getTemplateNum(b));
       return orderA - orderB;
     });
+
+    othersList.sort((a, b) => getTemplateNum(a) - getTemplateNum(b));
 
     return { upiCards: upiList, otherCards: othersList };
   }, [cards]);

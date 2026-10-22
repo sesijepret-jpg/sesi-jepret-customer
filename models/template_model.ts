@@ -80,13 +80,17 @@ export class TemplateModel implements ITemplate {
     const photoCounts: Record<number, number> = {
       1: 3, 2: 3, 3: 2, 4: 4, 5: 3, 6: 3, 7: 3, 8: 3,
       9: 4, 10: 4, 11: 4, 12: 4, 13: 3, 14: 4, 15: 4, 16: 3, 17: 4, 18: 3, 19: 4,
+      20: 2, 21: 3, 22: 3, 23: 4, 24: 4, 25: 3, 26: 4, 27: 4, 28: 4, 29: 3,
     };
 
-    return Array.from({ length: 19 }).map((_, i) => {
+    const upiTemplates = [21, 22, 23, 25, 26];
+
+    return Array.from({ length: 29 }).map((_, i) => {
       const num = i + 1;
       const count = photoCounts[num] ?? 3;
       const cdnUrl = `https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main/${num}.png`;
-      
+      const isUpi = upiTemplates.includes(num);
+
       return new TemplateModel({
         id: `local_template_${num}`,
         name: `Photo Booth ${num}`,
@@ -95,7 +99,7 @@ export class TemplateModel implements ITemplate {
         templateImage: cdnUrl,
         orientation: 'portrait',
         printSize: '2x6',
-        category: 'Photo Booth',
+        category: isUpi ? 'Tutorial UPI' : 'Photo Booth',
         photoCount: count,
         active: true,
         canvasWidth: 600,

@@ -39,9 +39,9 @@ async function uploadImageToStorage(num) {
 }
 
 async function runSeed() {
-  console.log('--- Starting migration of 19 templates to Firebase ---');
+  console.log('--- Starting migration of 29 templates to Firebase ---');
 
-  for (let num = 1; num <= 19; num++) {
+  for (let num = 1; num <= 29; num++) {
     const layoutPath = path.join(templatesDir, `layout-template-${num}.json`);
     if (!fs.existsSync(layoutPath)) {
       console.warn(`Skipping ${num}: layout file not found`);

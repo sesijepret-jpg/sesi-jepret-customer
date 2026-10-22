@@ -18,7 +18,7 @@ const CDN_BASE = 'https://cdn.jsdelivr.net/gh/sesijepret-jpg/templates@main';
 async function updateTemplates() {
   console.log('--- Updating Firestore templates with jsDelivr CDN URLs ---');
 
-  for (let num = 1; num <= 19; num++) {
+  for (let num = 1; num <= 29; num++) {
     const templateId = `template_${num}`;
     const cdnImageUrl = `${CDN_BASE}/${num}.png`;
     const docRef = doc(db, 'templates', templateId);
@@ -32,7 +32,7 @@ async function updateTemplates() {
     console.log(`[Firestore] Updated ${templateId} -> ${cdnImageUrl}`);
   }
 
-  console.log('--- All 19 templates updated successfully! ---');
+  console.log('--- All 29 templates updated successfully! ---');
   process.exit(0);
 }
 
