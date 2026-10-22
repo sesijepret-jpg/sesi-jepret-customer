@@ -12,32 +12,60 @@ export class TemplateService {
   }
 
   /**
+   * Menggabungkan template dari Firestore dengan template lokal,
+   * memastikan template baru (seperti 20-29) tidak hilang jika belum terdaftar di Firestore.
+   */
+  private _mergeTemplates(firestoreTemplates: TemplateModel[], localTemplates: TemplateModel[]): TemplateModel[] {
+    const getNum = (t: TemplateModel) => {
+      const match = t.id.match(/\d+/) || t.name.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+
+    const existingNums = new Set(firestoreTemplates.map(getNum));
+    const merged = [...firestoreTemplates];
+
+    for (const localTpl of localTemplates) {
+      const num = getNum(localTpl);
+      if (!existingNums.has(num)) {
+        merged.push(localTpl);
+        existingNums.add(num);
+      }
+    }
+
+    return merged.sort((a, b) => getNum(a) - getNum(b));
+  }
+
+  /**
    * Retrieve all active templates.
-   * Prioritas: Firestore → Dynamic Local API
+   * Prioritas: Menggabungkan Firestore dengan template lokal agar semua template (1-29) selalu lengkap.
    */
   async getActiveTemplates(): Promise<TemplateModel[]> {
+    let localList = TemplateModel.localTemplates;
+
+    // Fetch dynamic template list from API if available
     try {
-      const templates = await this.repository.getActiveTemplates();
-      if (templates.length > 0 && !templates.every((t) => t.id.startsWith('placeholder_'))) {
-        return templates;
+      const res = await fetch('/api/templates');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.templates && data.templates.length > 0) {
+          localList = data.templates.map((t: any) => new TemplateModel(t));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch dynamic templates:', e);
+    }
+    this.cachedDynamicTemplates = localList;
+
+    try {
+      const firestoreTemplates = await this.repository.getActiveTemplates();
+      if (firestoreTemplates.length > 0 && !firestoreTemplates.every((t) => t.id.startsWith('placeholder_'))) {
+        return this._mergeTemplates(firestoreTemplates, localList);
       }
     } catch (e) {
       console.warn('Failed to fetch from Firestore, falling back to local', e);
     }
 
-    // Fallback: fetch dynamically from /api/templates
-    try {
-      const res = await fetch('/api/templates');
-      if (res.ok) {
-        const data = await res.json();
-        this.cachedDynamicTemplates = data.templates.map((t: any) => new TemplateModel(t));
-        return this.cachedDynamicTemplates;
-      }
-    } catch (e) {
-      console.warn('Failed to fetch dynamic templates:', e);
-    }
-
-    return TemplateModel.localTemplates; // Absolute fallback
+    return localList;
   }
 
   /**
@@ -123,11 +151,14 @@ export class TemplateService {
   ): () => void {
     return this.repository.watchActiveTemplates(
       async (templates) => {
+        const localList = this.cachedDynamicTemplates.length > 0
+          ? this.cachedDynamicTemplates
+          : TemplateModel.localTemplates;
+
         if (templates.length === 0 || templates.every((t) => t.id.startsWith('placeholder_'))) {
-          const dynamicTemplates = await this.getActiveTemplates();
-          onNext(dynamicTemplates);
+          onNext(localList);
         } else {
-          onNext(templates);
+          onNext(this._mergeTemplates(templates, localList));
         }
       },
       onError
