@@ -79,7 +79,7 @@ export default function TemplatesPage() {
     }));
   }, [templates]);
 
-  const TUTORIAL_UPI_NUMBERS = [21, 22, 23, 25, 26];
+  const TUTORIAL_UPI_NUMBERS = [11, 13, 14, 15, 16, 21, 22, 23, 25, 26];
 
   const getTemplateNum = (tpl: TemplateCard) => {
     const match = tpl.id.match(/\d+/) || tpl.name.match(/\d+/);

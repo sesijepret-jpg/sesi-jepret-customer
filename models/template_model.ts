@@ -83,7 +83,7 @@ export class TemplateModel implements ITemplate {
       20: 2, 21: 3, 22: 3, 23: 4, 24: 4, 25: 3, 26: 4, 27: 4, 28: 4, 29: 3,
     };
 
-    const upiTemplates = [21, 22, 23, 25, 26];
+    const upiTemplates = [11, 13, 14, 15, 16, 21, 22, 23, 25, 26];
 
     return Array.from({ length: 29 }).map((_, i) => {
       const num = i + 1;
