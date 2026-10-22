@@ -14,8 +14,11 @@ import { useSessionStore } from '@/store/session_store';
 import { SessionRepository } from '@/repositories/session_repository';
 import { useSessionTimer } from '@/hooks/useSessionTimer';
 import { captureCanonPhoto, checkCanonCamera, getCanonPreview, photoBlobToDataUrl } from '@/services/canon_bridge_client';
+import { WebcamClient } from '@/services/webcam_client';
 
 const sessionRepository = new SessionRepository();
+
+type CameraMode = 'detecting' | 'canon' | 'webcam';
 
 interface PhotoSlot {
   id: string;
@@ -35,6 +38,12 @@ export default function CameraPage() {
   const [countdown, setCountdown] = useState<number>(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [photoSlotsCount, setPhotoSlotsCount] = useState<number>(4);
+
+  // Webcam fallback state
+  const [cameraMode, setCameraMode] = useState<CameraMode>('detecting');
+  const webcamRef = useRef<WebcamClient | null>(null);
+  const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+  const webcamContainerRef = useRef<HTMLDivElement | null>(null);
 
   const sessionId = useSessionStore((state) => state.sessionId);
   const setCapturedPhotos = useSessionStore((state) => state.setCapturedPhotos);
@@ -92,7 +101,55 @@ export default function CameraPage() {
     }
   }, [photoSlots.length, photoSlotsCount, handleFinish]);
 
+  // ─── Detection: try Canon bridge first, fallback to webcam ───
   useEffect(() => {
+    let active = true;
+
+    const detect = async () => {
+      // Try Canon bridge first
+      try {
+        await checkCanonCamera();
+        if (active) {
+          setCameraMode('canon');
+          setCameraReady(true);
+          setSupportMessage(null);
+        }
+        return;
+      } catch {
+        // Canon bridge not available, try webcam
+      }
+
+      // Fallback to browser webcam
+      try {
+        const client = new WebcamClient();
+        const video = await client.start();
+        if (active) {
+          webcamRef.current = client;
+          webcamVideoRef.current = video;
+          setCameraMode('webcam');
+          setCameraReady(true);
+          setSupportMessage(null);
+        } else {
+          client.stop();
+        }
+      } catch {
+        if (active) {
+          setCameraReady(false);
+          setSupportMessage('Tidak dapat mengakses kamera. Izinkan akses kamera di browser Anda.');
+        }
+      }
+    };
+
+    void detect();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // ─── Canon mode: health check polling ───
+  useEffect(() => {
+    if (cameraMode !== 'canon') return;
     let active = true;
     let checking = false;
     const check = async () => {
@@ -113,13 +170,13 @@ export default function CameraPage() {
         checking = false;
       }
     };
-    void check();
     const timer = window.setInterval(check, 2500);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [cameraMode]);
 
+  // ─── Canon mode: live preview polling ───
   useEffect(() => {
-    if (!cameraReady) return;
+    if (cameraMode !== 'canon' || !cameraReady) return;
     let active = true;
     const controller = new AbortController();
     let failedFrames = 0;
@@ -160,7 +217,33 @@ export default function CameraPage() {
       previewUrlRef.current = null;
       setPreviewUrl(null);
     };
-  }, [cameraReady]);
+  }, [cameraMode, cameraReady]);
+
+  // ─── Webcam mode: attach video element to DOM ───
+  useEffect(() => {
+    if (cameraMode !== 'webcam') return;
+    const container = webcamContainerRef.current;
+    const video = webcamVideoRef.current;
+    if (container && video) {
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'cover';
+      video.style.transform = 'scaleX(-1)';
+      container.appendChild(video);
+    }
+    return () => {
+      if (container && video && container.contains(video)) {
+        container.removeChild(video);
+      }
+    };
+  }, [cameraMode]);
+
+  // ─── Cleanup webcam on unmount ───
+  useEffect(() => {
+    return () => {
+      webcamRef.current?.stop();
+    };
+  }, []);
 
   const capturePhoto = async () => {
     if (!cameraReady || isCapturing) return;
@@ -199,14 +282,27 @@ export default function CameraPage() {
     }, 150);
 
     try {
-      previewPausedRef.current = true;
-      const jpeg = await captureCanonPhoto();
-      const dataUrl = await photoBlobToDataUrl(jpeg);
-      setPhotoSlots((prev) => [...prev, { id: `${Date.now()}`, dataUrl }].slice(-photoSlotsCount));
-      setSupportMessage(null);
+      if (cameraMode === 'canon') {
+        // Canon capture
+        previewPausedRef.current = true;
+        const jpeg = await captureCanonPhoto();
+        const dataUrl = await photoBlobToDataUrl(jpeg);
+        setPhotoSlots((prev) => [...prev, { id: `${Date.now()}`, dataUrl }].slice(-photoSlotsCount));
+        setSupportMessage(null);
+      } else if (cameraMode === 'webcam') {
+        // Webcam capture
+        const webcam = webcamRef.current;
+        if (!webcam) throw new Error('Webcam tidak tersedia.');
+        const blob = await webcam.capture();
+        const dataUrl = await photoBlobToDataUrl(blob);
+        setPhotoSlots((prev) => [...prev, { id: `${Date.now()}`, dataUrl }].slice(-photoSlotsCount));
+        setSupportMessage(null);
+      }
     } catch (error) {
-      setSupportMessage(error instanceof Error ? error.message : 'Gagal memotret dengan EOS M50.');
-      setCameraReady(false);
+      setSupportMessage(error instanceof Error ? error.message : 'Gagal memotret.');
+      if (cameraMode === 'canon') {
+        setCameraReady(false);
+      }
     } finally {
       previewPausedRef.current = false;
       setIsCapturing(false);
@@ -236,6 +332,8 @@ export default function CameraPage() {
     </div>
   );
 
+  const modeLabel = cameraMode === 'canon' ? 'Canon EOS M50' : cameraMode === 'webcam' ? 'Webcam' : '';
+
   return (
     <MainLayout step={4} footerHint="Klik tombol kamera untuk mengambil foto" headerLeftElement={timerElement}>
       <div className="w-full h-full flex flex-col lg:flex-row gap-6 max-w-6xl mx-auto px-4 py-4">
@@ -246,10 +344,16 @@ export default function CameraPage() {
           className="relative flex-1 rounded-[32px] border border-gray-200 overflow-hidden bg-black shadow-lg"
           style={{ minHeight: '26rem' }}
         >
-          {previewUrl && (
+          {/* Canon live preview */}
+          {cameraMode === 'canon' && previewUrl && (
             // Live view arrives as a changing local Blob URL; Next Image optimization is not applicable.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewUrl} alt="Pratinjau langsung Canon EOS M50" className="w-full h-full object-cover" />
+          )}
+
+          {/* Webcam live preview */}
+          {cameraMode === 'webcam' && (
+            <div ref={webcamContainerRef} className="w-full h-full" />
           )}
 
           {showFlash && (
@@ -263,7 +367,13 @@ export default function CameraPage() {
             </div>
           )}
 
-          {!previewUrl && !supportMessage && (
+          {cameraMode === 'detecting' && !supportMessage && (
+            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
+              Mendeteksi kamera...
+            </div>
+          )}
+
+          {cameraMode === 'canon' && !previewUrl && !supportMessage && (
             <div className="absolute inset-0 flex items-center justify-center text-white/70 text-sm">
               Menyiapkan pratinjau Canon EOS M50...
             </div>
@@ -279,6 +389,13 @@ export default function CameraPage() {
               >
                 {countdown}
               </motion.div>
+            </div>
+          )}
+
+          {/* Camera mode badge */}
+          {cameraMode !== 'detecting' && (
+            <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1 z-10">
+              <span className="text-white/80 text-xs font-medium">{modeLabel}</span>
             </div>
           )}
 
@@ -322,7 +439,7 @@ export default function CameraPage() {
               onClick={capturePhoto}
             >
               <Camera size={18} />
-              {canCapture ? 'Ambil Foto' : hasPhotos ? 'Ambil Foto Lagi' : 'Menyiapkan Kamera...'}
+              {canCapture ? 'Ambil Foto' : hasPhotos ? 'Ambil Foto Lagi' : cameraMode === 'detecting' ? 'Mendeteksi Kamera...' : 'Menyiapkan Kamera...'}
             </PrimaryButton>
 
             <SecondaryButton size="md" fullWidth disabled={!hasPhotos} onClick={removeLastPhoto}>
