@@ -116,10 +116,31 @@ export class TemplateService {
    * Load layout dari file JSON lokal di /public/templates/.
    */
   private async _loadLocalLayout(path: string, fallbackId: string): Promise<LayoutModel> {
+    const fetchJson = async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    };
+
     try {
-      const res = await fetch(path);
-      if (!res.ok) throw new Error(`Failed to fetch layout: ${res.status}`);
-      const json = await res.json();
+      let json;
+      try {
+        json = await fetchJson(path);
+      } catch (err) {
+        if (path.includes('cdn.jsdelivr.net/gh/')) {
+          const fallbackPath = path
+            .replace('cdn.jsdelivr.net/gh/', 'raw.githubusercontent.com/')
+            .replace('@main', '/main');
+          json = await fetchJson(fallbackPath);
+        } else if (path.includes('raw.githubusercontent.com/')) {
+          const fallbackPath = path
+            .replace('raw.githubusercontent.com/', 'cdn.jsdelivr.net/gh/')
+            .replace('/main/', '@main/');
+          json = await fetchJson(fallbackPath);
+        } else {
+          throw err;
+        }
+      }
 
       const slots: SlotModel[] = (json.slots || []).map((s: any, idx: number) =>
         new SlotModel({

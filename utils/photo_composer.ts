@@ -46,18 +46,38 @@ export class PhotoComposer {
    * Tidak set crossOrigin untuk data:/blob: URL agar canvas tidak jadi "tainted".
    */
   static loadImage(src: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-      if (!src) {
-        reject(new Error('Image source is empty'));
-        return;
+    const tryLoad = (url: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        if (!url) {
+          reject(new Error('Image source is empty'));
+          return;
+        }
+        const img = new Image();
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.onload = () => resolve(img);
+        img.onerror = (e) => reject(e);
+        img.src = url;
+      });
+    };
+
+    return tryLoad(src).catch((err) => {
+      if (src.includes('cdn.jsdelivr.net/gh/')) {
+        const fallbackUrl = src
+          .replace('cdn.jsdelivr.net/gh/', 'raw.githubusercontent.com/')
+          .replace('@main', '/main');
+        console.warn(`[PhotoComposer] Load gagal untuk ${src}, mencoba fallback ${fallbackUrl}`);
+        return tryLoad(fallbackUrl);
       }
-      const img = new Image();
-      if (src.startsWith('http://') || src.startsWith('https://')) {
-        img.crossOrigin = 'anonymous';
+      if (src.includes('raw.githubusercontent.com/')) {
+        const fallbackUrl = src
+          .replace('raw.githubusercontent.com/', 'cdn.jsdelivr.net/gh/')
+          .replace('/main/', '@main/');
+        console.warn(`[PhotoComposer] Load gagal untuk ${src}, mencoba fallback ${fallbackUrl}`);
+        return tryLoad(fallbackUrl);
       }
-      img.onload = () => resolve(img);
-      img.onerror = (e) => reject(e);
-      img.src = src;
+      throw err;
     });
   }
 
