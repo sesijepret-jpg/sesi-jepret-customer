@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSessionStore } from '../store/session_store';
 import { EmailService } from '../services/email_service';
 import { SessionRepository } from '../repositories/session_repository';
+import { PhotoComposer } from '../utils/photo_composer';
 import { withRetry } from '../utils/firestore_helpers';
 import toast from 'react-hot-toast';
 
@@ -34,7 +35,7 @@ async function resolvePhotoBase64(photoUrl: string): Promise<string | undefined>
 }
 
 export function useEmailSend() {
-  const { sessionId, uploadedPhotoUrl, composedPhotoBase64, setEmail } = useSessionStore();
+  const { sessionId, uploadedPhotoUrl, composedPhotoBase64, capturedPhotos, setEmail } = useSessionStore();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,19 @@ export function useEmailSend() {
         console.warn('[useEmailSend] Tidak bisa konversi foto ke base64, akan coba via photo_url.');
       }
 
+      // Siapkan foto-foto pose asli terkompresi (web-optimized 1600px ~250KB per foto)
+      let compressedRawPhotos: string[] = [];
+      if (capturedPhotos && capturedPhotos.length > 0) {
+        try {
+          const promises = capturedPhotos.map((photo) =>
+            PhotoComposer.compressForEmail(photo.dataUrl, 1600, 0.8)
+          );
+          compressedRawPhotos = await Promise.all(promises);
+        } catch (compErr) {
+          console.warn('[useEmailSend] Gagal kompres raw photos:', compErr);
+        }
+      }
+
       // Kirim email dengan maksimal 3 kali percobaan
       await withRetry(
         async () => {
@@ -77,6 +91,7 @@ export function useEmailSend() {
             photoUrl: uploadedPhotoUrl || '',
             sessionId: sessionId,
             photoBase64: photoBase64 ?? undefined,
+            rawPhotos: compressedRawPhotos,
           });
 
           if (!successResult) {

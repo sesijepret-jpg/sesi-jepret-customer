@@ -294,4 +294,45 @@ export class PhotoComposer {
     });
   }
 
+  /**
+   * Kompres satu foto pose agar ringan untuk dikirim via email (maksimal 1600px, kualitas 80%).
+   * Mengurangi ukuran file dari ~5 MB menjadi ~250-300 KB tanpa mengurangi ketajaman di layar HP.
+   */
+  static async compressForEmail(
+    dataUrl: string,
+    maxDimension: number = 1600,
+    quality: number = 0.8
+  ): Promise<string> {
+    try {
+      const img = await PhotoComposer.loadImage(dataUrl);
+      let { naturalWidth: w, naturalHeight: h } = img;
+
+      if (!w || !h) return dataUrl;
+
+      if (w > maxDimension || h > maxDimension) {
+        if (w > h) {
+          h = Math.round((h * maxDimension) / w);
+          w = maxDimension;
+        } else {
+          w = Math.round((w * maxDimension) / h);
+          h = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return dataUrl;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      return canvas.toDataURL('image/jpeg', quality);
+    } catch (e) {
+      console.warn('[PhotoComposer] compressForEmail fallback ke dataUrl asli:', e);
+      return dataUrl;
+    }
+  }
 }

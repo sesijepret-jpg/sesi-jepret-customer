@@ -48,8 +48,10 @@ export class EmailService {
     recipientName?: string;
     /** Data base64 foto (opsional, prioritas utama jika disediakan) */
     photoBase64?: string;
+    /** Foto-foto pose asli tanpa bingkai (base64 data URL) */
+    rawPhotos?: string[];
   }): Promise<boolean> {
-    const { email, photoUrl, sessionId, recipientName, photoBase64 } = params;
+    const { email, photoUrl, sessionId, recipientName, photoBase64, rawPhotos } = params;
     const isDev = process.env.NODE_ENV === 'development';
 
     // ── Persiapkan base64 foto ──────────────────────────────────────────────
@@ -64,13 +66,14 @@ export class EmailService {
       }
     }
 
-    // ── Mode development: langsung ke API route ─────────────────────────────
-    if (isDev) {
-      console.log('[EmailService] Mode lokal — langsung ke /api/send-email');
-      return this._callApiRoute({ email, photoUrl, photoBase64: base64 ?? undefined, sessionId, recipientName });
+    // ── Jika ada rawPhotos atau mode development: langsung ke API route ───────
+    // API route /api/send-email mendukung pengiriman multi-lampiran (strip + pose-pose asli)
+    if (isDev || (rawPhotos && rawPhotos.length > 0)) {
+      console.log('[EmailService] Mengirim via /api/send-email (mendukung multi-lampiran foto pose asli)');
+      return this._callApiRoute({ email, photoUrl, photoBase64: base64 ?? undefined, rawPhotos, sessionId, recipientName });
     }
 
-    // ── Mode production: coba Firebase Cloud Function dulu ──────────────────
+    // ── Mode production tanpa rawPhotos: coba Firebase Cloud Function dulu ──
     try {
       const { getFunctions, httpsCallable } = await import('firebase/functions');
       const { default: app } = await import('../lib/firebase');
@@ -91,7 +94,7 @@ export class EmailService {
       return result.data.success === true;
     } catch (e: any) {
       console.warn('[EmailService] Cloud Function gagal, fallback ke API route:', e?.message);
-      return this._callApiRoute({ email, photoUrl, photoBase64: base64 ?? undefined, sessionId, recipientName });
+      return this._callApiRoute({ email, photoUrl, photoBase64: base64 ?? undefined, rawPhotos, sessionId, recipientName });
     }
   }
 
@@ -100,12 +103,13 @@ export class EmailService {
     email: string;
     photoUrl: string;
     photoBase64?: string;
+    rawPhotos?: string[];
     sessionId: string;
     recipientName?: string;
   }): Promise<boolean> {
-    const { email, photoUrl, photoBase64, sessionId, recipientName } = params;
+    const { email, photoUrl, photoBase64, rawPhotos, sessionId, recipientName } = params;
 
-    const body: Record<string, string | undefined> = {
+    const body: Record<string, any> = {
       email,
       session_id: sessionId,
       recipient_name: recipientName || 'Pelanggan Sesijepret',
@@ -115,6 +119,10 @@ export class EmailService {
       body.photo_base64 = photoBase64;
     } else {
       body.photo_url = photoUrl;
+    }
+
+    if (rawPhotos && rawPhotos.length > 0) {
+      body.raw_photos = rawPhotos;
     }
 
     const response = await fetch('/api/send-email', {

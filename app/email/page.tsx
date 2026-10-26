@@ -197,11 +197,11 @@ export default function EmailPage() {
   };
 
   return (
-    <MainLayout step={6} footerHint="Foto akan dikirim ke email Anda dalam beberapa menit">
+    <MainLayout step={6} footerHint="Foto strip dan seluruh foto pose asli akan dikirim ke email Anda">
       <div className="w-full max-w-md mx-auto flex flex-col items-center gap-8">
         <PageTitle
           title="Kirim ke Email"
-          subtitle="Masukkan email Anda untuk menerima foto hasil sesi ini."
+          subtitle="Masukkan email Anda untuk menerima foto strip dan seluruh foto pose asli (tanpa frame)."
         />
 
         <motion.div

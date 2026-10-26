@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, photo_url, photo_base64, session_id } = await req.json();
+    const { email, photo_url, photo_base64, raw_photos, session_id } = await req.json();
 
     // ── Validasi parameter ──────────────────────────────────────────────────
     if (!email || (!photo_url && !photo_base64) || !session_id) {
@@ -125,7 +125,7 @@ Sesijepret`;
                 Terima kasih telah menggunakan <strong>Sesijepret</strong>.
               </p>
               <p style="margin:0 0 16px;color:#333333;font-size:15px;line-height:1.7;">
-                Foto yang Anda abadikan telah berhasil diproses dan kami lampirkan pada email ini.
+                Foto yang Anda abadikan telah berhasil diproses. Kami melampirkan <strong>foto strip berbingkai</strong> serta <strong>seluruh foto pose asli (tanpa frame)</strong> pada email ini agar dapat Anda simpan dan bagikan ke media sosial.
               </p>
               <p style="margin:0 0 24px;color:#333333;font-size:15px;line-height:1.7;">
                 Semoga momen tersebut menjadi kenangan indah bersama keluarga, sahabat, maupun orang tersayang.
@@ -163,19 +163,45 @@ Sesijepret`;
 
     const fileExt = detectedMime === 'image/png' ? 'png' : 'jpg';
 
+    const attachments: Array<{
+      filename: string;
+      content: Buffer;
+      contentType: string;
+    }> = [
+      {
+        filename: `Sesijepret_${session_id}_strip.${fileExt}`,
+        content: photoBuffer,
+        contentType: detectedMime,
+      },
+    ];
+
+    if (Array.isArray(raw_photos) && raw_photos.length > 0) {
+      raw_photos.forEach((poseBase64, index) => {
+        if (!poseBase64 || typeof poseBase64 !== 'string') return;
+        let poseMime = 'image/jpeg';
+        if (poseBase64.startsWith('data:')) {
+          const match = poseBase64.match(/^data:(image\/[a-z]+);base64,/);
+          if (match) poseMime = match[1];
+        }
+        const cleanBase64 = poseBase64.includes(',') ? poseBase64.split(',')[1] : poseBase64;
+        const poseExt = poseMime === 'image/png' ? 'png' : 'jpg';
+        attachments.push({
+          filename: `Sesijepret_${session_id}_pose_${index + 1}.${poseExt}`,
+          content: Buffer.from(cleanBase64, 'base64'),
+          contentType: poseMime,
+        });
+      });
+    }
+
+    console.log(`[API/send-email] Sending ${attachments.length} attachments (1 strip + ${attachments.length - 1} raw poses) to ${email}`);
+
     await transporter.sendMail({
       from: fromAddress,
       to: email,
       subject: 'Your Sesijepret Memories 📸',
       text: textBody,
       html: htmlBody,
-      attachments: [
-        {
-          filename: `Sesijepret_${session_id}.${fileExt}`,
-          content: photoBuffer,
-          contentType: detectedMime,
-        },
-      ],
+      attachments,
     });
 
     console.log(`[API/send-email] ✅ Email sent to ${email} for session ${session_id}`);
