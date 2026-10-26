@@ -15,6 +15,7 @@ import { SessionRepository } from '@/repositories/session_repository';
 import { useSessionTimer } from '@/hooks/useSessionTimer';
 import { captureCanonPhoto, checkCanonCamera, getCanonPreview, photoBlobToDataUrl } from '@/services/canon_bridge_client';
 import { WebcamClient } from '@/services/webcam_client';
+import { soundEffects } from '@/utils/sound_effects';
 
 const sessionRepository = new SessionRepository();
 
@@ -250,13 +251,18 @@ export default function CameraPage() {
 
     setIsCapturing(true);
 
-    // Hitung mundur 5 detik
+    // Hitung mundur 5 detik disertai suara bip
     setCountdown(5);
+    soundEffects.playBeep(false);
+
     await new Promise<void>((resolve) => {
       let currentCount = 5;
       const interval = setInterval(() => {
         currentCount -= 1;
         setCountdown(currentCount);
+        if (currentCount > 0) {
+          soundEffects.playBeep(currentCount === 1);
+        }
         if (currentCount <= 0) {
           clearInterval(interval);
           resolve();
@@ -264,19 +270,12 @@ export default function CameraPage() {
       }, 1000);
     });
 
-    // Jeda singkat 200ms sebelum shutter memotret
-    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    // Jeda singkat 150ms sebelum shutter memotret
+    await new Promise<void>((resolve) => setTimeout(resolve, 150));
 
-    // Shutter Visual and Sound
+    // Shutter Visual and Sound: Cekrek! 📸
     setShowFlash(true);
-    try {
-      const shutterAudio = new Audio('/sounds/shutter.mp3');
-      shutterAudio.play().catch(() => {
-        // Ignore autoplay errors
-      });
-    } catch {
-      // Ignore audio creation errors
-    }
+    soundEffects.playShutter();
     setTimeout(() => {
       setShowFlash(false);
     }, 150);
@@ -380,13 +379,13 @@ export default function CameraPage() {
           )}
 
           {countdown > 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs z-20">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xs z-20">
               <motion.div
                 key={countdown}
                 initial={{ scale: 1.3, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.25 }}
-                className={`flex h-40 w-40 flex-col items-center justify-center rounded-full border-4 backdrop-blur-md shadow-2xl transition-all duration-300 ${
+                transition={{ duration: 0.2 }}
+                className={`flex h-40 w-40 items-center justify-center rounded-full border-4 backdrop-blur-md shadow-2xl transition-all duration-300 ${
                   countdown > 3
                     ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 shadow-emerald-500/30'
                     : countdown > 1
@@ -394,11 +393,8 @@ export default function CameraPage() {
                     : 'border-[#E6007A] bg-[#E6007A]/30 text-white shadow-[#E6007A]/50 scale-105'
                 }`}
               >
-                <span className="text-[4.5rem] font-black leading-none drop-shadow-md">
+                <span className="text-[5.5rem] font-black leading-none drop-shadow-md">
                   {countdown}
-                </span>
-                <span className="text-xs font-bold tracking-widest uppercase mt-1 opacity-90">
-                  {countdown > 3 ? 'Siap-siap' : countdown > 1 ? 'Tahan pose' : 'Senyum! 📸'}
                 </span>
               </motion.div>
             </div>
