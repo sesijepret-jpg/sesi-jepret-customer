@@ -250,10 +250,10 @@ export default function CameraPage() {
 
     setIsCapturing(true);
 
-    // Hitung mundur 3 detik
-    setCountdown(3);
+    // Hitung mundur 5 detik
+    setCountdown(5);
     await new Promise<void>((resolve) => {
-      let currentCount = 3;
+      let currentCount = 5;
       const interval = setInterval(() => {
         currentCount -= 1;
         setCountdown(currentCount);
@@ -264,8 +264,8 @@ export default function CameraPage() {
       }, 1000);
     });
 
-    // Jeda 1 detik tambahan sebelum memotret
-    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    // Jeda singkat 200ms sebelum shutter memotret
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
 
     // Shutter Visual and Sound
     setShowFlash(true);
@@ -380,14 +380,26 @@ export default function CameraPage() {
           )}
 
           {countdown > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs z-20">
               <motion.div
-                initial={{ scale: 0.88, opacity: 0 }}
+                key={countdown}
+                initial={{ scale: 1.3, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.2 }}
-                className="flex h-36 w-36 items-center justify-center rounded-full bg-white/10 border border-white/20 text-white text-[4rem] font-black"
+                transition={{ duration: 0.25 }}
+                className={`flex h-40 w-40 flex-col items-center justify-center rounded-full border-4 backdrop-blur-md shadow-2xl transition-all duration-300 ${
+                  countdown > 3
+                    ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 shadow-emerald-500/30'
+                    : countdown > 1
+                    ? 'border-amber-400/80 bg-amber-500/20 text-amber-100 shadow-amber-500/30'
+                    : 'border-[#E6007A] bg-[#E6007A]/30 text-white shadow-[#E6007A]/50 scale-105'
+                }`}
               >
-                {countdown}
+                <span className="text-[4.5rem] font-black leading-none drop-shadow-md">
+                  {countdown}
+                </span>
+                <span className="text-xs font-bold tracking-widest uppercase mt-1 opacity-90">
+                  {countdown > 3 ? 'Siap-siap' : countdown > 1 ? 'Tahan pose' : 'Senyum! 📸'}
+                </span>
               </motion.div>
             </div>
           )}

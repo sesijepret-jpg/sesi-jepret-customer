@@ -7,7 +7,7 @@ export const AppConstants = {
   sessionTimerSeconds: 600, // 10 minutes
   thankYouScreenSeconds: 5, // 5 seconds auto-return
   splashScreenSeconds: 1, // Splash duration
-  photoCountdownSeconds: 3, // 3-2-1 countdown
+  photoCountdownSeconds: 5, // 5-4-3-2-1 countdown
   inactivityTimeoutSeconds: 120, // 2 min inactivity reset
 
   // Photo Slots
