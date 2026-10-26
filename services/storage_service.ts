@@ -118,17 +118,17 @@ export class StorageService {
         },
       };
 
-      // Batas waktu 30 detik — jika Firebase Storage Rules memblokir upload,
-      // error akan muncul segera tanpa menunggu semua retry habis.
+      // Batas waktu wajar — jika Firebase Storage Rules memblokir upload atau jaringan lambat,
+      // fallback segera aktif tanpa membuat antrean menunggu lama.
       const uploadTask = await withTimeout(
         uploadBytes(storageRef, blob, metadata),
-        30000,
-        'Upload foto gagal: koneksi ke Firebase Storage timeout (30s). Pastikan Firebase Storage Rules mengizinkan penulisan.'
+        7000,
+        'Upload foto gagal: koneksi ke Firebase Storage timeout (7s). Menggunakan penyimpanan lokal.'
       );
       const downloadUrl = await withTimeout(
         getDownloadURL(uploadTask.ref),
-        15000,
-        'Gagal mendapatkan URL foto: timeout (15s).'
+        4000,
+        'Gagal mendapatkan URL foto: timeout (4s).'
       );
       return downloadUrl;
     } catch (e) {

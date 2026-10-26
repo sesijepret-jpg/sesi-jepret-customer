@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -16,6 +16,7 @@ import Modal from '@/components/ui/Modal';
 import { useSessionStore } from '@/store/session_store';
 import { SessionRepository } from '@/repositories/session_repository';
 import { TemplateService } from '@/services/template_service';
+import { StorageService } from '@/services/storage_service';
 import { TemplateModel } from '@/models/template_model';
 import { LayoutModel } from '@/models/layout_model';
 import { PhotoComposer } from '@/utils/photo_composer';
@@ -28,6 +29,7 @@ interface PhotoSlot {
 }
 
 const sessionRepository = new SessionRepository();
+const storageService = new StorageService();
 
 const FILTERS = [
   { id: 'none', name: 'Original', class: '', filterVal: 'none' },
@@ -38,7 +40,13 @@ const FILTERS = [
 
 export default function EditPhotoPage() {
   const router = useRouter();
-  const { sessionId, capturedPhotos, setCapturedPhotos } = useSessionStore();
+  const {
+    sessionId,
+    capturedPhotos,
+    setCapturedPhotos,
+    setComposedPhotoBase64,
+    setComposedPhotoBlobUrl,
+  } = useSessionStore();
   const [selectedFilter, setSelectedFilter] = useState('none');
   const [processing, setProcessing] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -48,6 +56,10 @@ export default function EditPhotoPage() {
   const [generatingPreview, setGeneratingPreview] = useState(false);
   const [showRetakeModal, setShowRetakeModal] = useState(false);
   const [isRetaking, setIsRetaking] = useState(false);
+
+  // Simpan blob dan filter hasil render terbaru untuk dipakai langsung saat 'Lanjut' (0 detik loading)
+  const latestBlobRef = useRef<Blob | null>(null);
+  const latestFilterRef = useRef<string>('none');
 
   // Hentikan timer ketika masuk halaman edit
   useSessionTimer(true);
@@ -147,6 +159,8 @@ export default function EditPhotoPage() {
         });
 
         if (isMounted) {
+          latestBlobRef.current = blob;
+          latestFilterRef.current = selectedFilter;
           if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
           setPreviewBlobUrl(URL.createObjectURL(blob));
         }
@@ -164,6 +178,7 @@ export default function EditPhotoPage() {
   const handleRetakeConfirm = async () => {
     setIsRetaking(true);
     try {
+      latestBlobRef.current = null;
       useSessionStore.getState().setCapturedPhotos([]);
       useSessionStore.getState().setComposedPhotoBase64(null);
       useSessionStore.getState().setComposedPhotoBlobUrl(null);
@@ -213,6 +228,41 @@ export default function EditPhotoPage() {
 
       // Save to store
       setCapturedPhotos(updatedPhotos);
+
+      // Gunakan blob yang sudah selesai di-render di preview jika filter cocok,
+      // atau lakukan compose sekali jika belum ada.
+      let finalBlob =
+        latestFilterRef.current === selectedFilter && latestBlobRef.current
+          ? latestBlobRef.current
+          : null;
+
+      if (!finalBlob && template && layout) {
+        finalBlob = await PhotoComposer.compose({
+          template,
+          layout,
+          photos: updatedPhotos,
+        });
+      }
+
+      if (finalBlob) {
+        const objectUrl = URL.createObjectURL(finalBlob);
+        setComposedPhotoBlobUrl(objectUrl);
+        const base64 = await PhotoComposer.blobToBase64(finalBlob);
+        setComposedPhotoBase64(base64);
+
+        // Simpan ke IndexedDB lokal secara non-blocking di latar belakang
+        finalBlob
+          .arrayBuffer()
+          .then((buf) => {
+            storageService
+              .saveToLocalStorage({
+                sessionId: sessionId || 'session',
+                imageBytes: new Uint8Array(buf),
+              })
+              .catch((err) => console.warn('[EditPhoto] Local save non-fatal:', err));
+          })
+          .catch((err) => console.warn('[EditPhoto] arrayBuffer non-fatal:', err));
+      }
 
       if (sessionId) {
         await sessionRepository.updateStage(sessionId, 'EDIT_PHOTO_COMPLETED');

@@ -46,7 +46,46 @@ export default function EmailPage() {
   const [preparing, setPreparing] = useState(false);
   const [prepError, setPrepError] = useState<string | null>(null);
 
-  // Compose dan upload saat pertama kali masuk halaman (sekali saja)
+  // Helper untuk upload ke Cloud & simpan lokal di latar belakang tanpa memblokir layar
+  const triggerBackgroundUpload = async (base64: string, existingBytes?: Uint8Array) => {
+    if (!sessionId) return;
+    try {
+      let bytes = existingBytes;
+      if (!bytes) {
+        const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
+        const binaryStr = atob(base64Data);
+        bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+      }
+
+      // 1. Simpan ke IndexedDB lokal (non-fatal)
+      try {
+        await storageService.saveToLocalStorage({ sessionId, imageBytes: bytes });
+      } catch (localErr) {
+        console.warn('[EmailPage] Local save gagal (non-fatal):', localErr);
+      }
+
+      // 2. Upload ke Firebase Storage di background (non-fatal)
+      const downloadUrl = await storageService.uploadComposedPhoto({
+        sessionId,
+        imageBytes: bytes,
+      });
+      setUploadedPhotoUrl(downloadUrl);
+
+      // 3. Update stage di Firestore (non-fatal)
+      try {
+        await sessionRepository.updateStage(sessionId, 'PHOTO_COMPOSED');
+      } catch (firestoreErr) {
+        console.warn('[EmailPage] Firestore updateStage gagal (non-fatal):', firestoreErr);
+      }
+    } catch (err) {
+      console.warn('[EmailPage] Background cloud upload gagal (non-fatal):', err);
+    }
+  };
+
+  // Persiapkan foto jika belum ada di memori
   useEffect(() => {
     const preparePhoto = async () => {
       if (!sessionId) {
@@ -55,11 +94,32 @@ export default function EmailPage() {
         return;
       }
 
-      // Sudah di-compose sebelumnya → skip
+      // Kasus 1: Sudah di-compose di halaman Edit Photo (Alur Utama - Instan 0 Detik)
       if (composedPhotoBase64) {
+        if (!uploadedPhotoUrl) {
+          triggerBackgroundUpload(composedPhotoBase64);
+        }
         return;
       }
 
+      // Kasus 2: Cek apakah ada di cache IndexedDB lokal (misal setelah refresh)
+      try {
+        const localBlob = await storageService.getLatestLocalPhoto(sessionId);
+        if (localBlob) {
+          const objUrl = URL.createObjectURL(localBlob);
+          setComposedPhotoBlobUrl(objUrl);
+          const base64String = await PhotoComposer.blobToBase64(localBlob);
+          setComposedPhotoBase64(base64String);
+          if (!uploadedPhotoUrl) {
+            triggerBackgroundUpload(base64String);
+          }
+          return;
+        }
+      } catch (idbErr) {
+        console.warn('[EmailPage] Gagal memulihkan foto dari IndexedDB:', idbErr);
+      }
+
+      // Kasus 3: Fallback compose jika belum ada di memori atau IndexedDB
       if (capturedPhotos.length === 0) {
         toast.error('Tidak ada foto yang ditemukan.');
         router.replace('/camera');
@@ -76,9 +136,7 @@ export default function EmailPage() {
           templates.find((t) => t.id === selectedTemplateId) ||
           templates[0] ||
           TemplateModel.localTemplates[0];
-        const layout = await templateService.getTemplateLayout(
-          activeTemplate.id
-        );
+        const layout = await templateService.getTemplateLayout(activeTemplate.id);
 
         // ── 2. Compose menjadi PNG final ────────────────────────────────────
         const blob = await PhotoComposer.compose({
@@ -88,50 +146,31 @@ export default function EmailPage() {
           fallbackColor: '#000000',
         });
 
-        // ── 3. Simpan sebagai Object URL (untuk Preview & Print) ────────────
+        // ── 3. Simpan ke state memori agar UI langsung bisa dipakai ─────────
         const objectUrl = URL.createObjectURL(blob);
         setComposedPhotoBlobUrl(objectUrl);
 
-        // ── 4. Convert ke Base64 (untuk Email) ─────────────────────────────
         const base64String = await PhotoComposer.blobToBase64(blob);
         setComposedPhotoBase64(base64String);
 
-        // ── 5. Convert ke Uint8Array & upload ke Firebase Storage ───────────
+        // UI langsung dibuka (tidak menunggu upload cloud selesai)
+        setPreparing(false);
+
+        // ── 4. Upload cloud & IndexedDB di latar belakang ───────────────────
         const arrayBuffer = await blob.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
-
-        // Local IndexedDB save (non-fatal)
-        try {
-          await storageService.saveToLocalStorage({ sessionId, imageBytes: bytes });
-        } catch (localErr) {
-          console.warn('[EmailPage] Local save gagal (non-fatal):', localErr);
-        }
-
-        // Upload ke Firebase Storage (sudah ada fallback ke blob URL di dalamnya)
-        const downloadUrl = await storageService.uploadComposedPhoto({
-          sessionId,
-          imageBytes: bytes,
-        });
-        setUploadedPhotoUrl(downloadUrl);
-
-        // ── 6. Update stage di Firestore (non-fatal) ──────────────────────
-        try {
-          await sessionRepository.updateStage(sessionId, 'PHOTO_COMPOSED');
-        } catch (firestoreErr) {
-          console.warn('[EmailPage] Firestore updateStage gagal (non-fatal):', firestoreErr);
-        }
+        triggerBackgroundUpload(base64String, bytes);
       } catch (e: any) {
-        console.error('[EmailPage] Gagal compose/upload foto:', e);
+        console.error('[EmailPage] Gagal compose foto:', e);
         setPrepError(e.message || 'Gagal memproses foto.');
         toast.error('Gagal mempersiapkan foto.');
-      } finally {
         setPreparing(false);
       }
     };
 
     preparePhoto();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, composedPhotoBase64]);
 
   const handleSendEmail = async () => {
     if (!isValidEmail(emailInput)) {
