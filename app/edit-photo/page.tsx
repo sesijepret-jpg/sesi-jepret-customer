@@ -180,11 +180,13 @@ export default function EditPhotoPage() {
     setIsRetaking(true);
     try {
       latestBlobRef.current = null;
+      BoomerangGenerator.reset();
       useSessionStore.getState().setCapturedPhotos([]);
       useSessionStore.getState().setComposedPhotoBase64(null);
       useSessionStore.getState().setComposedPhotoBlobUrl(null);
       useSessionStore.getState().setBoomerangGifBase64(null);
       useSessionStore.getState().setBoomerangGifBlobUrl(null);
+      useSessionStore.getState().setIsBoomerangGenerating(false);
       useSessionStore.getState().setUploadedPhotoUrl(null);
 
       if (sessionId) {
@@ -233,6 +235,7 @@ export default function EditPhotoPage() {
       setCapturedPhotos(updatedPhotos);
 
       // Mulai pembuatan Boomerang Ping-Pong GIF di latar belakang tanpa blocking navigasi
+      useSessionStore.getState().setIsBoomerangGenerating(true);
       BoomerangGenerator.generateBoomerang(updatedPhotos)
         .then(async (result) => {
           if (result) {
@@ -246,7 +249,10 @@ export default function EditPhotoPage() {
             }
           }
         })
-        .catch((err) => console.warn('[EditPhoto] Boomerang generation gagal (non-fatal):', err));
+        .catch((err) => console.warn('[EditPhoto] Boomerang generation gagal (non-fatal):', err))
+        .finally(() => {
+          useSessionStore.getState().setIsBoomerangGenerating(false);
+        });
 
       // Gunakan blob yang sudah selesai di-render di preview jika filter cocok,
       // atau lakukan compose sekali jika belum ada.

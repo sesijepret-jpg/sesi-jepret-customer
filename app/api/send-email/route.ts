@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
 Terima kasih telah menggunakan Sesijepret.
 
-Foto yang Anda abadikan telah berhasil diproses dan kami lampirkan pada email ini.
+Foto yang Anda abadikan telah berhasil diproses. Kami melampirkan foto strip berbingkai, seluruh foto pose asli (tanpa frame), serta animasi Boomerang Ping-Pong (.gif) pada email ini agar dapat Anda simpan dan bagikan ke media sosial.
 
 Semoga momen tersebut menjadi kenangan indah bersama keluarga, sahabat, maupun orang tersayang.
 

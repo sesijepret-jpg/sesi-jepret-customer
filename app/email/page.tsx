@@ -11,6 +11,7 @@ import PageTitle from '@/components/ui/PageTitle';
 import LoadingOverlay from '@/components/ui/LoadingOverlay';
 import EmailSuccessDialog from '@/components/dialogs/EmailSuccessDialog';
 import EmailErrorDialog from '@/components/dialogs/EmailErrorDialog';
+import Modal from '@/components/ui/Modal';
 import { ArrowLeft, Mail, Send } from 'lucide-react';
 import { useSessionStore } from '@/store/session_store';
 import { useEmailSend } from '@/hooks/useEmailSend';
@@ -40,6 +41,7 @@ export default function EmailPage() {
     setComposedPhotoBlobUrl,
     boomerangGifBase64,
     boomerangGifBlobUrl,
+    isBoomerangGenerating,
     setBoomerangGifBase64,
     setBoomerangGifBlobUrl,
     email: storeEmail,
@@ -51,6 +53,7 @@ export default function EmailPage() {
   const [preparing, setPreparing] = useState(false);
   const [prepError, setPrepError] = useState<string | null>(null);
   const [boomerangGenerating, setBoomerangGenerating] = useState(false);
+  const [showGifModal, setShowGifModal] = useState(false);
 
   // Helper untuk upload ke Cloud & simpan lokal di latar belakang tanpa memblokir layar
   const triggerBackgroundUpload = async (base64: string, existingBytes?: Uint8Array) => {
@@ -298,27 +301,36 @@ export default function EmailPage() {
           )}
 
           {/* Boomerang GIF Status / Badge */}
-          {boomerangGenerating ? (
+          {isBoomerangGenerating || boomerangGenerating ? (
             <div className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-pink-50 border border-pink-100 text-xs font-medium text-[#E6007A]">
               <span className="w-2 h-2 rounded-full bg-[#E6007A] animate-ping" />
               <span>🎬 Menyiapkan Boomerang GIF...</span>
             </div>
-          ) : boomerangGifBlobUrl ? (
-            <div className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 border border-gray-200">
-              <img
-                src={boomerangGifBlobUrl}
-                alt="Boomerang GIF"
-                className="w-12 h-16 object-cover rounded-lg shadow-sm border border-gray-200 shrink-0"
-              />
-              <div className="flex flex-col text-left overflow-hidden">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-gray-900">🎬 Boomerang GIF Siap</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+          ) : (boomerangGifBlobUrl || boomerangGifBase64) ? (
+            <div
+              onClick={() => setShowGifModal(true)}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:border-pink-300 hover:bg-pink-50/40 transition-all cursor-pointer group"
+              title="Klik untuk melihat pratinjau animasi Boomerang GIF"
+            >
+              <div className="flex items-center gap-3 overflow-hidden">
+                <img
+                  src={boomerangGifBlobUrl || boomerangGifBase64 || ''}
+                  alt="Boomerang GIF"
+                  className="w-12 h-16 object-cover rounded-lg shadow-sm border border-gray-200 shrink-0 group-hover:scale-105 transition-transform"
+                />
+                <div className="flex flex-col text-left overflow-hidden">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-gray-900 group-hover:text-[#E6007A] transition-colors">🎬 Boomerang GIF Siap</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                  </div>
+                  <span className="text-[11px] text-gray-500 truncate">
+                    Ketuk untuk pratinjau animasi penuh
+                  </span>
                 </div>
-                <span className="text-[11px] text-gray-500 truncate">
-                  Animasi Ping-Pong otomatis dilampirkan
-                </span>
               </div>
+              <span className="text-[11px] font-semibold text-[#E6007A] px-2 py-1 bg-pink-100/60 rounded-lg shrink-0">
+                Lihat
+              </span>
             </div>
           ) : null}
 
@@ -350,6 +362,35 @@ export default function EmailPage() {
 
       {/* Loading overlay untuk proses compose */}
       <LoadingOverlay visible={preparing} message="Memproses foto hasil akhir..." />
+
+      {/* Modal Pratinjau Boomerang GIF Penuh */}
+      <Modal
+        open={showGifModal}
+        onClose={() => setShowGifModal(false)}
+        title="Animasi Boomerang GIF"
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative rounded-2xl overflow-hidden border border-gray-200 bg-black/5 max-h-[50vh] flex items-center justify-center">
+            {boomerangGifBlobUrl || boomerangGifBase64 ? (
+              <img
+                src={boomerangGifBlobUrl || boomerangGifBase64 || ''}
+                alt="Boomerang GIF Animation"
+                className="max-h-[50vh] w-auto object-contain rounded-2xl shadow-md"
+              />
+            ) : null}
+          </div>
+          <p className="text-xs text-center text-gray-500 leading-relaxed">
+            Animasi Boomerang Ping-Pong ini akan otomatis dilampirkan ke email Anda bersama foto strip berbingkai dan foto pose asli.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowGifModal(false)}
+            className="w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition-colors"
+          >
+            Tutup Pratinjau
+          </button>
+        </div>
+      </Modal>
 
       {/* Success Dialog */}
       <EmailSuccessDialog open={success} email={emailInput} onConfirm={handleSuccessConfirm} />

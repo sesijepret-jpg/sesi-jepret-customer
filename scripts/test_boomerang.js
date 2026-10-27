@@ -15,6 +15,11 @@ function computePingPongIndices(n) {
   return indices;
 }
 
+// 5 poses (Poses 1, 2, 3, 4, 5)
+const seq5 = computePingPongIndices(5);
+assert.deepStrictEqual(seq5, [0, 1, 2, 3, 4, 3, 2, 1], '5 poses must ping-pong as 1 -> 2 -> 3 -> 4 -> 5 -> 4 -> 3 -> 2');
+console.log('✓ 5 poses sequence passed: [0, 1, 2, 3, 4, 3, 2, 1]');
+
 // 4 poses (Poses 1, 2, 3, 4)
 const seq4 = computePingPongIndices(4);
 assert.deepStrictEqual(seq4, [0, 1, 2, 3, 2, 1], '4 poses must ping-pong as 1 -> 2 -> 3 -> 4 -> 3 -> 2');
@@ -43,26 +48,106 @@ console.log('✓ 0 poses handled gracefully');
 // 2. Test Downscaling & Aspect Ratio
 console.log('\n[TEST 2] Downscaling & Even Height Computation');
 function computeDimensions(origW, origH, targetW = 600) {
-  const aspectRatio = origH / (origW || 1);
+  const safeW = origW > 0 ? origW : targetW;
+  const safeH = origH > 0 ? origH : Math.round(targetW * (4 / 3));
+  const aspectRatio = safeH / safeW;
   const rawH = Math.round(targetW * aspectRatio);
-  const safeH = rawH % 2 === 0 ? rawH : rawH + 1;
-  return { width: targetW, height: safeH };
+  const evenH = rawH % 2 === 0 ? rawH : rawH + 1;
+  return { width: targetW, height: Math.max(2, evenH) };
 }
 
+// 4:3 portrait (1200x1600)
 const dim1 = computeDimensions(1200, 1600, 600);
 assert.strictEqual(dim1.width, 600);
 assert.strictEqual(dim1.height, 800);
 assert.strictEqual(dim1.height % 2, 0, 'Height must be even');
 console.log('✓ 1200x1600 downscaled to 600x800 (even height)');
 
+// 16:9 landscape (1920x1080)
 const dim2 = computeDimensions(1920, 1080, 600);
 assert.strictEqual(dim2.width, 600);
 assert.strictEqual(dim2.height, 338);
 assert.strictEqual(dim2.height % 2, 0, 'Height must be even');
 console.log('✓ 1920x1080 downscaled to 600x338 (even height)');
 
-// 3. Test GIF Encoding, Headers & Loop Metadata
-console.log('\n[TEST 3] GIF Encoding & Loop Behavior');
+// 1:1 square (1000x1000)
+const dim3 = computeDimensions(1000, 1000, 600);
+assert.strictEqual(dim3.width, 600);
+assert.strictEqual(dim3.height, 600);
+assert.strictEqual(dim3.height % 2, 0, 'Height must be even');
+console.log('✓ 1000x1000 square downscaled to 600x600 (even height)');
+
+// 0 dimension resilience
+const dim0 = computeDimensions(0, 0, 600);
+assert.ok(dim0.height >= 2, 'Must never produce 0 height');
+assert.strictEqual(dim0.height % 2, 0, 'Height must be even');
+console.log('✓ 0x0 fallback handled gracefully without zero-height division');
+
+// 3. Test Center Crop (object-fit: cover) Logic
+console.log('\n[TEST 3] Center-Crop (Cover) Coordinate Calculation');
+function computeCenterCrop(imgW, imgH, targetW, targetH) {
+  const imgRatio = imgW / imgH;
+  const targetRatio = targetW / targetH;
+  let sx = 0, sy = 0, sWidth = imgW, sHeight = imgH;
+
+  if (imgRatio > targetRatio) {
+    sWidth = Math.round(imgH * targetRatio);
+    sx = Math.round((imgW - sWidth) / 2);
+  } else if (imgRatio < targetRatio) {
+    sHeight = Math.round(imgW / targetRatio);
+    sy = Math.round((imgH - sHeight) / 2);
+  }
+  return { sx, sy, sWidth, sHeight };
+}
+
+// Wider image into portrait target: should crop sides
+const cropWide = computeCenterCrop(1920, 1080, 600, 800);
+assert.ok(cropWide.sx > 0, 'Must crop horizontal sides');
+assert.strictEqual(cropWide.sy, 0);
+assert.strictEqual(cropWide.sHeight, 1080);
+console.log(`✓ Wide image center-cropped: sx=${cropWide.sx}, sWidth=${cropWide.sWidth}`);
+
+// Taller image into square target: should crop top/bottom
+const cropTall = computeCenterCrop(1000, 2000, 600, 600);
+assert.strictEqual(cropTall.sx, 0);
+assert.ok(cropTall.sy > 0, 'Must crop vertical top/bottom');
+assert.strictEqual(cropTall.sWidth, 1000);
+console.log(`✓ Tall image center-cropped: sy=${cropTall.sy}, sHeight=${cropTall.sHeight}`);
+
+// 4. Test Watermark Layout Positioning
+console.log('\n[TEST 4] Watermark Layout & Margins');
+function computeWatermarkBounds(targetW, targetH, textWidth = 65, iconSize = 16) {
+  const paddingX = 12;
+  const pillHeight = 28;
+  const gap = 7;
+  const margin = 16;
+  const pillWidth = paddingX * 2 + iconSize + gap + textWidth;
+  const pillX = targetW - margin - pillWidth;
+  const pillY = targetH - margin - pillHeight;
+  return { pillX, pillY, pillWidth, pillHeight, margin };
+}
+
+const wm1 = computeWatermarkBounds(600, 800);
+assert.strictEqual(wm1.pillX + wm1.pillWidth, 600 - 16, 'Watermark must be anchored 16px from right edge');
+assert.strictEqual(wm1.pillY + wm1.pillHeight, 800 - 16, 'Watermark must be anchored 16px from bottom edge');
+console.log(`✓ Watermark bottom-right anchoring confirmed: pillX=${wm1.pillX}, pillY=${wm1.pillY}, pillWidth=${wm1.pillWidth}`);
+
+// 5. Test Concurrency Deduplication Key
+console.log('\n[TEST 5] Concurrency Deduplication Key');
+function computeDeduplicationKey(rawUrls) {
+  return `${rawUrls.length}:${rawUrls.map((u) => u.length + '_' + u.slice(-15)).join(':')}`;
+}
+
+const urlsA = ['data:image/jpeg;base64,AAA111222333444', 'data:image/jpeg;base64,BBB111222333444'];
+const urlsB = ['data:image/jpeg;base64,AAA111222333444', 'data:image/jpeg;base64,BBB111222333444'];
+const urlsC = ['data:image/jpeg;base64,CCC111222333444', 'data:image/jpeg;base64,DDD111222333444'];
+
+assert.strictEqual(computeDeduplicationKey(urlsA), computeDeduplicationKey(urlsB), 'Identical photo arrays must yield matching deduplication key');
+assert.notStrictEqual(computeDeduplicationKey(urlsA), computeDeduplicationKey(urlsC), 'Different photo arrays must yield different keys');
+console.log('✓ Concurrency deduplication key logic confirmed');
+
+// 6. Test GIF Encoding, Headers & Loop Metadata
+console.log('\n[TEST 6] GIF Encoding & Loop Behavior');
 const width = 60;
 const height = 80;
 const gif = GIFEncoder();
@@ -115,8 +200,8 @@ const totalDurationMs = frames.length * delay;
 assert.strictEqual(totalDurationMs, 2400);
 console.log(`✓ Loop timing verified: 6 frames * 400ms = ${totalDurationMs}ms (~2.4s)`);
 
-// 4. Test Email Attachment Payload Processing
-console.log('\n[TEST 4] Email Attachment Processing');
+// 7. Test Email Attachment Payload Processing
+console.log('\n[TEST 7] Email Attachment Processing');
 const sessionId = 'test-session-1234';
 const base64Gif = 'data:image/gif;base64,' + Buffer.from(bytes).toString('base64');
 
@@ -138,4 +223,4 @@ assert.strictEqual(attachments[0].contentType, 'image/gif');
 assert.strictEqual(attachments[0].content.length, bytes.length);
 console.log(`✓ Email attachment generated: "${attachments[0].filename}" (${(attachments[0].content.length / 1024).toFixed(1)} KB)`);
 
-console.log('\n--- ALL TESTS PASSED SUCCESSFULLY! ---');
+console.log('\n--- ALL 7 TESTS PASSED SUCCESSFULLY! ---');

@@ -21,6 +21,8 @@ interface SessionState {
   boomerangGifBase64: string | null;
   /** Object URL dari Boomerang Ping-Pong GIF untuk preview */
   boomerangGifBlobUrl: string | null;
+  /** Status apakah pembuatan Boomerang Ping-Pong GIF sedang berlangsung di background */
+  isBoomerangGenerating: boolean;
   email: string | null;
 
   setSessionId: (id: string | null) => void;
@@ -32,13 +34,14 @@ interface SessionState {
   setComposedPhotoBlobUrl: (url: string | null) => void;
   setBoomerangGifBase64: (base64: string | null) => void;
   setBoomerangGifBlobUrl: (url: string | null) => void;
+  setIsBoomerangGenerating: (isGenerating: boolean) => void;
   setEmail: (email: string | null) => void;
   reset: () => void;
 }
 
 export const useSessionStore = create<SessionState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       sessionId: null,
       voucherCode: null,
       selectedTemplateId: null,
@@ -49,6 +52,7 @@ export const useSessionStore = create<SessionState>()(
       composedPhotoBlobUrl: null,
       boomerangGifBase64: null,
       boomerangGifBlobUrl: null,
+      isBoomerangGenerating: false,
       email: null,
 
       setSessionId: (id) => set({ sessionId: id }),
@@ -60,8 +64,24 @@ export const useSessionStore = create<SessionState>()(
       setComposedPhotoBlobUrl: (url) => set({ composedPhotoBlobUrl: url }),
       setBoomerangGifBase64: (base64) => set({ boomerangGifBase64: base64 }),
       setBoomerangGifBlobUrl: (url) => set({ boomerangGifBlobUrl: url }),
+      setIsBoomerangGenerating: (isGenerating) => set({ isBoomerangGenerating: isGenerating }),
       setEmail: (email) => set({ email }),
-      reset: () =>
+      reset: () => {
+        const state = get();
+        if (state.boomerangGifBlobUrl) {
+          try {
+            URL.revokeObjectURL(state.boomerangGifBlobUrl);
+          } catch {
+            // ignore
+          }
+        }
+        if (state.composedPhotoBlobUrl) {
+          try {
+            URL.revokeObjectURL(state.composedPhotoBlobUrl);
+          } catch {
+            // ignore
+          }
+        }
         set({
           sessionId: null,
           voucherCode: null,
@@ -73,8 +93,10 @@ export const useSessionStore = create<SessionState>()(
           composedPhotoBlobUrl: null,
           boomerangGifBase64: null,
           boomerangGifBlobUrl: null,
+          isBoomerangGenerating: false,
           email: null,
-        }),
+        });
+      },
     }),
     {
       name: 'boro-photo-booth-session',
