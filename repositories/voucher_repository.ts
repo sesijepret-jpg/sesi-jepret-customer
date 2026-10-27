@@ -79,8 +79,13 @@ export class VoucherRepository {
           throw new CodeAlreadyUsedException(code);
         }
 
-        // Hapus dokumen voucher dari Firestore agar otomatis hilang dari riwayat voucher admin
-        transaction.delete(voucherDocRef);
+        // Tandai voucher sebagai sudah terpakai (sesuai aturan keamanan Firestore)
+        transaction.update(voucherDocRef, {
+          is_used: true,
+          status: 'USED',
+          used_at: serverTimestamp(),
+          session_id: sessionId,
+        });
 
         // Buat dokumen session dengan kode voucher terkait
         transaction.set(sessionDocRef, {
@@ -98,7 +103,7 @@ export class VoucherRepository {
         });
       });
 
-      console.log(`Voucher ${code} berhasil di-redeem dan dihapus otomatis dari koleksi voucher.`);
+      console.log(`Voucher ${code} berhasil di-redeem dan status diubah menjadi USED.`);
       return sessionId;
     } catch (e) {
       console.error("Transaction failed:", e);
