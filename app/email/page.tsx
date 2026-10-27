@@ -17,6 +17,7 @@ import { useEmailSend } from '@/hooks/useEmailSend';
 import { TemplateService } from '@/services/template_service';
 import { StorageService } from '@/services/storage_service';
 import { PhotoComposer } from '@/utils/photo_composer';
+import { BoomerangGenerator } from '@/utils/boomerang_generator';
 import { SessionRepository } from '@/repositories/session_repository';
 import { TemplateModel } from '@/models/template_model';
 import { isValidEmail } from '@/utils/validators';
@@ -37,6 +38,10 @@ export default function EmailPage() {
     composedPhotoBase64,
     setComposedPhotoBase64,
     setComposedPhotoBlobUrl,
+    boomerangGifBase64,
+    boomerangGifBlobUrl,
+    setBoomerangGifBase64,
+    setBoomerangGifBlobUrl,
     email: storeEmail,
   } = useSessionStore();
 
@@ -45,6 +50,7 @@ export default function EmailPage() {
   const [emailInput, setEmailInput] = useState(storeEmail || '');
   const [preparing, setPreparing] = useState(false);
   const [prepError, setPrepError] = useState<string | null>(null);
+  const [boomerangGenerating, setBoomerangGenerating] = useState(false);
 
   // Helper untuk upload ke Cloud & simpan lokal di latar belakang tanpa memblokir layar
   const triggerBackgroundUpload = async (base64: string, existingBytes?: Uint8Array) => {
@@ -172,6 +178,53 @@ export default function EmailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, composedPhotoBase64]);
 
+  // Persiapkan Boomerang GIF jika belum ada di memori
+  useEffect(() => {
+    let isMounted = true;
+    const prepareBoomerang = async () => {
+      if (!sessionId) return;
+
+      // Kasus 1: Sudah ada blob url & base64 di Zustand
+      if (boomerangGifBlobUrl && boomerangGifBase64) return;
+
+      // Kasus 2: Cek apakah ada di cache IndexedDB
+      try {
+        const localBlob = await storageService.getLatestLocalBoomerang(sessionId);
+        if (localBlob && isMounted) {
+          const objUrl = URL.createObjectURL(localBlob);
+          setBoomerangGifBlobUrl(objUrl);
+          const base64Str = await PhotoComposer.blobToBase64(localBlob);
+          setBoomerangGifBase64(base64Str);
+          return;
+        }
+      } catch (idbErr) {
+        console.warn('[EmailPage] Gagal pulihkan boomerang dari IndexedDB:', idbErr);
+      }
+
+      // Kasus 3: Jika belum ada tapi capturedPhotos ada, generate sekarang di background
+      if (capturedPhotos && capturedPhotos.length > 0 && !boomerangGifBase64) {
+        if (isMounted) setBoomerangGenerating(true);
+        try {
+          const result = await BoomerangGenerator.generateBoomerang(capturedPhotos);
+          if (result && isMounted) {
+            setBoomerangGifBase64(result.base64);
+            setBoomerangGifBlobUrl(result.blobUrl);
+            await storageService.saveBoomerangToLocalStorage({ sessionId, blob: result.blob });
+          }
+        } catch (err) {
+          console.warn('[EmailPage] Gagal membuat Boomerang GIF:', err);
+        } finally {
+          if (isMounted) setBoomerangGenerating(false);
+        }
+      }
+    };
+
+    prepareBoomerang();
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionId, boomerangGifBlobUrl, boomerangGifBase64, capturedPhotos, setBoomerangGifBase64, setBoomerangGifBlobUrl]);
+
   const handleSendEmail = async () => {
     if (!isValidEmail(emailInput)) {
       toast.error('Masukkan alamat email yang valid.');
@@ -197,11 +250,11 @@ export default function EmailPage() {
   };
 
   return (
-    <MainLayout step={6} footerHint="Foto strip dan seluruh foto pose asli akan dikirim ke email Anda">
+    <MainLayout step={6} footerHint="Foto strip, pose asli, dan animasi Boomerang GIF akan dikirim ke email Anda">
       <div className="w-full max-w-md mx-auto flex flex-col items-center gap-8">
         <PageTitle
           title="Kirim ke Email"
-          subtitle="Masukkan email Anda untuk menerima foto strip dan seluruh foto pose asli (tanpa frame)."
+          subtitle="Masukkan email Anda untuk menerima foto strip, seluruh foto pose asli (tanpa frame), dan animasi Boomerang GIF."
         />
 
         <motion.div
@@ -243,6 +296,31 @@ export default function EmailPage() {
               />
             </div>
           )}
+
+          {/* Boomerang GIF Status / Badge */}
+          {boomerangGenerating ? (
+            <div className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-pink-50 border border-pink-100 text-xs font-medium text-[#E6007A]">
+              <span className="w-2 h-2 rounded-full bg-[#E6007A] animate-ping" />
+              <span>🎬 Menyiapkan Boomerang GIF...</span>
+            </div>
+          ) : boomerangGifBlobUrl ? (
+            <div className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 border border-gray-200">
+              <img
+                src={boomerangGifBlobUrl}
+                alt="Boomerang GIF"
+                className="w-12 h-16 object-cover rounded-lg shadow-sm border border-gray-200 shrink-0"
+              />
+              <div className="flex flex-col text-left overflow-hidden">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-gray-900">🎬 Boomerang GIF Siap</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                </div>
+                <span className="text-[11px] text-gray-500 truncate">
+                  Animasi Ping-Pong otomatis dilampirkan
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           <PrimaryButton
             id="send-email-btn"

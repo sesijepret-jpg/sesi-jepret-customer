@@ -17,6 +17,10 @@ interface SessionState {
   composedPhotoBase64: string | null;
   /** Object URL dari Blob compose (untuk Preview — tidak perlu base64 besar) */
   composedPhotoBlobUrl: string | null;
+  /** Base64 data URL dari Boomerang Ping-Pong GIF */
+  boomerangGifBase64: string | null;
+  /** Object URL dari Boomerang Ping-Pong GIF untuk preview */
+  boomerangGifBlobUrl: string | null;
   email: string | null;
 
   setSessionId: (id: string | null) => void;
@@ -26,6 +30,8 @@ interface SessionState {
   setUploadedPhotoUrl: (url: string | null) => void;
   setComposedPhotoBase64: (base64: string | null) => void;
   setComposedPhotoBlobUrl: (url: string | null) => void;
+  setBoomerangGifBase64: (base64: string | null) => void;
+  setBoomerangGifBlobUrl: (url: string | null) => void;
   setEmail: (email: string | null) => void;
   reset: () => void;
 }
@@ -41,6 +47,8 @@ export const useSessionStore = create<SessionState>()(
       uploadedPhotoUrl: null,
       composedPhotoBase64: null,
       composedPhotoBlobUrl: null,
+      boomerangGifBase64: null,
+      boomerangGifBlobUrl: null,
       email: null,
 
       setSessionId: (id) => set({ sessionId: id }),
@@ -50,6 +58,8 @@ export const useSessionStore = create<SessionState>()(
       setUploadedPhotoUrl: (url) => set({ uploadedPhotoUrl: url }),
       setComposedPhotoBase64: (base64) => set({ composedPhotoBase64: base64 }),
       setComposedPhotoBlobUrl: (url) => set({ composedPhotoBlobUrl: url }),
+      setBoomerangGifBase64: (base64) => set({ boomerangGifBase64: base64 }),
+      setBoomerangGifBlobUrl: (url) => set({ boomerangGifBlobUrl: url }),
       setEmail: (email) => set({ email }),
       reset: () =>
         set({
@@ -61,6 +71,8 @@ export const useSessionStore = create<SessionState>()(
           uploadedPhotoUrl: null,
           composedPhotoBase64: null,
           composedPhotoBlobUrl: null,
+          boomerangGifBase64: null,
+          boomerangGifBlobUrl: null,
           email: null,
         }),
     }),

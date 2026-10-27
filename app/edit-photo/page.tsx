@@ -20,6 +20,7 @@ import { StorageService } from '@/services/storage_service';
 import { TemplateModel } from '@/models/template_model';
 import { LayoutModel } from '@/models/layout_model';
 import { PhotoComposer } from '@/utils/photo_composer';
+import { BoomerangGenerator } from '@/utils/boomerang_generator';
 import toast from 'react-hot-toast';
 import { useSessionTimer } from '@/hooks/useSessionTimer';
 
@@ -182,6 +183,8 @@ export default function EditPhotoPage() {
       useSessionStore.getState().setCapturedPhotos([]);
       useSessionStore.getState().setComposedPhotoBase64(null);
       useSessionStore.getState().setComposedPhotoBlobUrl(null);
+      useSessionStore.getState().setBoomerangGifBase64(null);
+      useSessionStore.getState().setBoomerangGifBlobUrl(null);
       useSessionStore.getState().setUploadedPhotoUrl(null);
 
       if (sessionId) {
@@ -228,6 +231,22 @@ export default function EditPhotoPage() {
 
       // Save to store
       setCapturedPhotos(updatedPhotos);
+
+      // Mulai pembuatan Boomerang Ping-Pong GIF di latar belakang tanpa blocking navigasi
+      BoomerangGenerator.generateBoomerang(updatedPhotos)
+        .then(async (result) => {
+          if (result) {
+            useSessionStore.getState().setBoomerangGifBase64(result.base64);
+            useSessionStore.getState().setBoomerangGifBlobUrl(result.blobUrl);
+            if (sessionId) {
+              await storageService.saveBoomerangToLocalStorage({
+                sessionId,
+                blob: result.blob,
+              });
+            }
+          }
+        })
+        .catch((err) => console.warn('[EditPhoto] Boomerang generation gagal (non-fatal):', err));
 
       // Gunakan blob yang sudah selesai di-render di preview jika filter cocok,
       // atau lakukan compose sekali jika belum ada.

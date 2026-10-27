@@ -38,10 +38,22 @@ async function getLatestLocalPhoto(sessionId: string): Promise<Blob | null> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('local_photos', 'readonly');
-    const prefix = `${sessionId}/`;
+    const prefix = `${sessionId}/photo_`;
     const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`);
     const request = tx.objectStore('local_photos').openCursor(range, 'prev');
     request.onsuccess = () => resolve((request.result?.value as Blob | undefined) || null);
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function getLocalBoomerang(sessionId: string): Promise<Blob | null> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('local_photos', 'readonly');
+    const key = `${sessionId}/boomerang.gif`;
+    const request = tx.objectStore('local_photos').get(key);
+    request.onsuccess = () => resolve((request.result as Blob | undefined) || null);
     request.onerror = () => reject(request.error);
     tx.oncomplete = () => db.close();
   });
@@ -91,6 +103,27 @@ export class StorageService {
   /** Restore the final PNG after refreshing the print page. */
   async getLatestLocalPhoto(sessionId: string): Promise<Blob | null> {
     return getLatestLocalPhoto(sessionId);
+  }
+
+  /** Restore the Boomerang GIF after page reload or directly on email screen. */
+  async getLatestLocalBoomerang(sessionId: string): Promise<Blob | null> {
+    return getLocalBoomerang(sessionId);
+  }
+
+  /** Save Boomerang GIF Blob to IndexedDB cache */
+  async saveBoomerangToLocalStorage(params: {
+    sessionId: string;
+    blob: Blob;
+  }): Promise<string> {
+    const { sessionId, blob } = params;
+    try {
+      const key = `${sessionId}/boomerang.gif`;
+      await storeLocalPhoto(key, blob);
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('[StorageService] Gagal simpan boomerang ke IndexedDB:', e);
+      return URL.createObjectURL(blob);
+    }
   }
 
   /**

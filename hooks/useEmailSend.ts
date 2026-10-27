@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useSessionStore } from '../store/session_store';
 import { EmailService } from '../services/email_service';
+import { StorageService } from '../services/storage_service';
 import { SessionRepository } from '../repositories/session_repository';
 import { PhotoComposer } from '../utils/photo_composer';
+import { BoomerangGenerator } from '../utils/boomerang_generator';
 import { withRetry } from '../utils/firestore_helpers';
 import toast from 'react-hot-toast';
 
 const emailService = new EmailService();
+const storageService = new StorageService();
 const sessionRepository = new SessionRepository();
 
 /**
@@ -35,7 +38,16 @@ async function resolvePhotoBase64(photoUrl: string): Promise<string | undefined>
 }
 
 export function useEmailSend() {
-  const { sessionId, uploadedPhotoUrl, composedPhotoBase64, capturedPhotos, setEmail } = useSessionStore();
+  const {
+    sessionId,
+    uploadedPhotoUrl,
+    composedPhotoBase64,
+    capturedPhotos,
+    boomerangGifBase64,
+    setBoomerangGifBase64,
+    setBoomerangGifBlobUrl,
+    setEmail,
+  } = useSessionStore();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +95,37 @@ export function useEmailSend() {
         }
       }
 
+      // Siapkan Boomerang Ping-Pong GIF
+      let gifBase64 = boomerangGifBase64;
+      if (!gifBase64 && sessionId) {
+        try {
+          const localBlob = await storageService.getLatestLocalBoomerang(sessionId);
+          if (localBlob) {
+            gifBase64 = await PhotoComposer.blobToBase64(localBlob);
+            setBoomerangGifBase64(gifBase64);
+          }
+        } catch (err) {
+          console.warn('[useEmailSend] Gagal memulihkan Boomerang dari IndexedDB:', err);
+        }
+      }
+
+      if (!gifBase64 && capturedPhotos && capturedPhotos.length > 0) {
+        try {
+          console.log('[useEmailSend] Membuat Boomerang Ping-Pong GIF untuk email...');
+          const bResult = await BoomerangGenerator.generateBoomerang(capturedPhotos);
+          if (bResult) {
+            gifBase64 = bResult.base64;
+            setBoomerangGifBase64(bResult.base64);
+            setBoomerangGifBlobUrl(bResult.blobUrl);
+            if (sessionId) {
+              storageService.saveBoomerangToLocalStorage({ sessionId, blob: bResult.blob }).catch(() => {});
+            }
+          }
+        } catch (bErr) {
+          console.warn('[useEmailSend] Gagal membuat Boomerang saat kirim email (non-fatal):', bErr);
+        }
+      }
+
       // Kirim email dengan maksimal 3 kali percobaan
       await withRetry(
         async () => {
@@ -92,6 +135,7 @@ export function useEmailSend() {
             sessionId: sessionId,
             photoBase64: photoBase64 ?? undefined,
             rawPhotos: compressedRawPhotos,
+            boomerangGifBase64: gifBase64 ?? undefined,
           });
 
           if (!successResult) {

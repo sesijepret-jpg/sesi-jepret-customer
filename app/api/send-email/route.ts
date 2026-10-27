@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, photo_url, photo_base64, raw_photos, session_id } = await req.json();
+    const { email, photo_url, photo_base64, raw_photos, boomerang_gif_base64, session_id } = await req.json();
 
     // ── Validasi parameter ──────────────────────────────────────────────────
     if (!email || (!photo_url && !photo_base64) || !session_id) {
@@ -125,7 +125,7 @@ Sesijepret`;
                 Terima kasih telah menggunakan <strong>Sesijepret</strong>.
               </p>
               <p style="margin:0 0 16px;color:#333333;font-size:15px;line-height:1.7;">
-                Foto yang Anda abadikan telah berhasil diproses. Kami melampirkan <strong>foto strip berbingkai</strong> serta <strong>seluruh foto pose asli (tanpa frame)</strong> pada email ini agar dapat Anda simpan dan bagikan ke media sosial.
+                Foto yang Anda abadikan telah berhasil diproses. Kami melampirkan <strong>foto strip berbingkai</strong>, <strong>seluruh foto pose asli (tanpa frame)</strong>, serta <strong>animasi Boomerang Ping-Pong (.gif)</strong> pada email ini agar dapat Anda simpan dan bagikan ke media sosial.
               </p>
               <p style="margin:0 0 24px;color:#333333;font-size:15px;line-height:1.7;">
                 Semoga momen tersebut menjadi kenangan indah bersama keluarga, sahabat, maupun orang tersayang.
@@ -193,7 +193,22 @@ Sesijepret`;
       });
     }
 
-    console.log(`[API/send-email] Sending ${attachments.length} attachments (1 strip + ${attachments.length - 1} raw poses) to ${email}`);
+    if (boomerang_gif_base64 && typeof boomerang_gif_base64 === 'string') {
+      const cleanGifBase64 = boomerang_gif_base64.includes(',')
+        ? boomerang_gif_base64.split(',')[1]
+        : boomerang_gif_base64;
+      const gifBuffer = Buffer.from(cleanGifBase64, 'base64');
+      if (gifBuffer.length > 0) {
+        attachments.push({
+          filename: `Sesijepret_${session_id}_boomerang.gif`,
+          content: gifBuffer,
+          contentType: 'image/gif',
+        });
+        console.log(`[API/send-email] Added Boomerang GIF attachment (${(gifBuffer.length / 1024).toFixed(1)} KB)`);
+      }
+    }
+
+    console.log(`[API/send-email] Sending ${attachments.length} attachments to ${email}`);
 
     await transporter.sendMail({
       from: fromAddress,
