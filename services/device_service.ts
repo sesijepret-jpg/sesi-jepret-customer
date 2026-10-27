@@ -1,4 +1,8 @@
 import { DeviceStatus } from '../types';
+import { SettingsRepository } from '../repositories/settings_repository';
+import { db } from '../lib/firebase';
+
+const BRIDGE_URL = (process.env.NEXT_PUBLIC_CANON_BRIDGE_URL || 'http://127.0.0.1:8765').replace(/\/$/, '');
 
 export interface IDeviceService {
   checkFirebase(): Promise<boolean>;
@@ -7,19 +11,18 @@ export interface IDeviceService {
   checkUsbCamera(): Promise<boolean>;
   checkFrontCamera(): Promise<boolean>;
   checkAll(): Promise<DeviceStatus>;
+  syncToFirestore(status: DeviceStatus): Promise<void>;
+  startHeartbeat(intervalMs?: number): () => void;
   watchUsbCameraStatus(
     onNext: (status: DeviceStatus) => void,
     intervalMs?: number
   ): () => void;
-  syncToFirestore(status: DeviceStatus): void;
   lastDeviceStatus: DeviceStatus;
 }
 
-/**
- * TODO: Implement using navigator.onLine, browser MediaDevices API,
- * and custom local network/printer status indicators.
- */
 export class DeviceService implements IDeviceService {
+  private readonly settingsRepo: SettingsRepository;
+
   lastDeviceStatus: DeviceStatus = {
     firebaseConnected: false,
     internetAvailable: false,
@@ -29,45 +32,167 @@ export class DeviceService implements IDeviceService {
     lastChecked: new Date(),
   };
 
+  constructor(settingsRepo?: SettingsRepository) {
+    this.settingsRepo = settingsRepo || new SettingsRepository();
+  }
+
   async checkFirebase(): Promise<boolean> {
-    // TODO: Implement Firebase connectivity check using db reference ping
-    return false;
+    try {
+      return (typeof navigator !== 'undefined' ? navigator.onLine : true) && db !== null;
+    } catch {
+      return false;
+    }
   }
 
   async checkInternet(): Promise<boolean> {
-    // TODO: Implement using navigator.onLine or ping logic
-    return false;
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
   }
 
   async checkPrinter(): Promise<boolean> {
-    // TODO: Implement using browser print check or printer service interface
-    return false;
+    try {
+      const res = await fetch(`${BRIDGE_URL}/print-status`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(2500),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return !!data.ready;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   async checkUsbCamera(): Promise<boolean> {
-    // TODO: Implement using MediaDevices enumeration filtering for USB cameras
+    // 1. Cek Canon bridge terlebih dahulu (DSLR)
+    try {
+      const res = await fetch(`${BRIDGE_URL}/health`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(2500),
+      });
+      if (res.ok) return true;
+    } catch {
+      // Canon bridge tidak merespons, coba cek webcam USB
+    }
+
+    // 2. Cek apakah ada kamera eksternal USB via browser MediaDevices
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        const hasExternal = videoInputs.some((d) => {
+          const label = d.label.toLowerCase();
+          return label.includes('usb') || label.includes('external') || label.includes('cam');
+        });
+        return hasExternal || videoInputs.length > 1;
+      }
+    } catch {
+      // mediaDevices error
+    }
+
     return false;
   }
 
   async checkFrontCamera(): Promise<boolean> {
-    // TODO: Implement using MediaDevices enumeration looking for front facing camera or videoinputs
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        return videoInputs.length > 0;
+      }
+    } catch {
+      // mediaDevices error
+    }
     return false;
   }
 
   async checkAll(): Promise<DeviceStatus> {
-    // TODO: Run checkFirebase, checkInternet, checkPrinter, checkUsbCamera, and checkFrontCamera in parallel
+    const [firebaseConnected, internetAvailable, printerReady, usbCameraConnected, frontCameraReady] =
+      await Promise.all([
+        this.checkFirebase(),
+        this.checkInternet(),
+        this.checkPrinter(),
+        this.checkUsbCamera(),
+        this.checkFrontCamera(),
+      ]);
+
+    this.lastDeviceStatus = {
+      firebaseConnected,
+      internetAvailable,
+      printerReady,
+      usbCameraConnected,
+      frontCameraReady,
+      lastChecked: new Date(),
+    };
+
     return this.lastDeviceStatus;
+  }
+
+  async syncToFirestore(status: DeviceStatus): Promise<void> {
+    try {
+      await this.settingsRepo.updateDeviceStatus({
+        usbCameraConnected: status.usbCameraConnected,
+        frontCameraReady: status.frontCameraReady,
+        firebaseConnected: status.firebaseConnected,
+        internetAvailable: status.internetAvailable,
+        printerReady: status.printerReady,
+      });
+    } catch (e) {
+      console.warn('[DeviceService] Gagal sinkron status perangkat ke Firestore:', e);
+    }
+  }
+
+  /**
+   * Menjalankan heartbeat berkala untuk memperbarui status perangkat ke Firestore.
+   * Dipanggil sekali saat kiosk web dibuka.
+   */
+  startHeartbeat(intervalMs: number = 25000): () => void {
+    let timer: NodeJS.Timeout | null = null;
+    let isRunning = false;
+
+    const performSync = async () => {
+      if (isRunning) return;
+      isRunning = true;
+      try {
+        const status = await this.checkAll();
+        await this.syncToFirestore(status);
+      } catch (err) {
+        console.warn('[DeviceService] Heartbeat loop error:', err);
+      } finally {
+        isRunning = false;
+      }
+    };
+
+    // Jalankan sinkronisasi awal setelah 2 detik
+    const initialTimer = setTimeout(performSync, 2000);
+
+    // Jalankan periodik tiap intervalMs (default 25 detik)
+    timer = setInterval(performSync, intervalMs);
+
+    const onNetworkChange = () => {
+      performSync();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', onNetworkChange);
+      window.addEventListener('offline', onNetworkChange);
+    }
+
+    return () => {
+      clearTimeout(initialTimer);
+      if (timer) clearInterval(timer);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', onNetworkChange);
+        window.removeEventListener('offline', onNetworkChange);
+      }
+    };
   }
 
   watchUsbCameraStatus(
     onNext: (status: DeviceStatus) => void,
     intervalMs: number = 5000
   ): () => void {
-    // TODO: Implement periodic check of device list changes
-    return () => {};
-  }
-
-  syncToFirestore(status: DeviceStatus): void {
-    // TODO: Implement sync to Firestore /settings/device_status document using SettingsRepository
+    return this.startHeartbeat(intervalMs);
   }
 }

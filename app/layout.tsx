@@ -3,6 +3,7 @@ import { Itim } from 'next/font/google';
 import './globals.css';
 
 import { Toaster } from 'react-hot-toast';
+import DeviceHeartbeat from '@/components/DeviceHeartbeat';
 
 const itim = Itim({
   variable: '--font-itim',
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="id" className={`${itim.variable} h-full`} suppressHydrationWarning>
       <body className="h-full antialiased" suppressHydrationWarning>
+        <DeviceHeartbeat />
         {children}
         <Toaster position="top-center" reverseOrder={false} />
       </body>

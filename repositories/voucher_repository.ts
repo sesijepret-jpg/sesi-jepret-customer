@@ -79,15 +79,10 @@ export class VoucherRepository {
           throw new CodeAlreadyUsedException(code);
         }
 
-        // Update voucher document
-        transaction.update(voucherDocRef, {
-          is_used: true,
-          status: 'USED',
-          used_at: serverTimestamp(),
-          session_id: sessionId,
-        });
+        // Hapus dokumen voucher dari Firestore agar otomatis hilang dari riwayat voucher admin
+        transaction.delete(voucherDocRef);
 
-        // Create session document
+        // Buat dokumen session dengan kode voucher terkait
         transaction.set(sessionDocRef, {
           code,
           status: 'STARTED',
@@ -103,20 +98,7 @@ export class VoucherRepository {
         });
       });
 
-      console.log("Code updated successfully");
-
-      // Verifikasi ulang setelah transaction sukses
-      const verifyDoc = await getDoc(voucherDocRef);
-      if (verifyDoc.exists()) {
-        const verifyData = verifyDoc.data() || {};
-        const verifyIsUsed = !!verifyData.is_used;
-        const verifyStatus = verifyData.status || 'ACTIVE';
-        console.log(`Verification - is_used: ${verifyIsUsed}, status: ${verifyStatus}`);
-        if (!verifyIsUsed || verifyStatus !== 'USED') {
-          throw new Error('Pengecekan ulang gagal: Status kode tidak berubah menjadi USED');
-        }
-      }
-
+      console.log(`Voucher ${code} berhasil di-redeem dan dihapus otomatis dari koleksi voucher.`);
       return sessionId;
     } catch (e) {
       console.error("Transaction failed:", e);
